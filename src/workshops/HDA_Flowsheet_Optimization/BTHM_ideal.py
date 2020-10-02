@@ -92,7 +92,7 @@ configuration = {
                         "enth_mol_form_vap_comp_ref": (
                             82.9e3, pyunits.J/pyunits.mol),  # [3]
                         "pressure_sat_comp_coeff": {
-                            'A': (9.60362, None),  # [4]
+                            'A': (4.60362, None),  # [4]
                             'B': (1701.073, pyunits.K),
                             'C': (20.806, pyunits.K)}}},
         'toluene': {"type": Component,
@@ -131,7 +131,7 @@ configuration = {
                         "enth_mol_form_vap_comp_ref": (
                             50.1e3, pyunits.J/pyunits.mol),  # [3]
                         "pressure_sat_comp_coeff": {
-                            'A': (9.54436, None),  # [4]
+                            'A': (4.54436, None),  # [4]
                             'B': (1738.123, pyunits.K),
                             'C': (0.394, pyunits.K)}}},
         'hydrogen': {"type": Component,
