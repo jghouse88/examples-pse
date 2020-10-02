@@ -19,6 +19,8 @@ IDeal VLE with non-condensables
 # Import Python libraries
 import logging
 
+from pyomo.environ import units as pyunits
+
 # Import IDAES cores
 from idaes.core import LiquidPhase, VaporPhase, Component
 from idaes.core.phases import PhaseType as PT
@@ -61,27 +63,38 @@ configuration = {
                     "pressure_sat_comp": NIST,
                     "phase_equilibrium_form": {("Vap", "Liq"): fugacity},
                     "parameter_data": {
-                        "mw": 78.1136E-3,  # [1]
-                        "pressure_crit": 48.9e5,  # [1]
-                        "temperature_crit": 562.2,  # [1]
-                        "dens_mol_liq_comp_coeff": {'1': 1.0162*1e3,  # [2] pg. 2-98
-                                                    '2': 0.2655,
-                                                    '3': 562.16,
-                                                    '4': 0.28212},
-                        "cp_mol_ig_comp_coeff": {'A': -3.392E1,  # [1]
-                                                 'B': 4.739E-1,
-                                                 'C': -3.017E-4,
-                                                 'D': 7.130E-8},
-                        "cp_mol_liq_comp_coeff": {'1': 1.29E2,  # [2]
-                                                  '2': -1.7E-1,
-                                                  '3': 6.48E-4,
-                                                  '4': 0,
-                                                  '5': 0},
-                        "enth_mol_form_liq_comp_ref": 49.0e3,  # [3]
-                        "enth_mol_form_vap_comp_ref": 82.9e3,  # [3]
-                        "pressure_sat_comp_coeff": {'A': 9.60362,  # [4]
-                                                    'B': 1701.073,
-                                                    'C': 20.806}}},
+                        "mw": (78.1136E-3, pyunits.kg/pyunits.mol),  # [1]
+                        "pressure_crit": (48.9e5, pyunits.Pa),  # [1]
+                        "temperature_crit": (562.2, pyunits.K),  # [1]
+                        "dens_mol_liq_comp_coeff": {
+                            '1': (1.0162, pyunits.kmol*pyunits.m**-3),  # [2] pg. 2-98
+                            '2': (0.2655, None),
+                            '3': (562.16, pyunits.K),
+                            '4': (0.28212, None)},
+                        "cp_mol_ig_comp_coeff": {
+                            'A': (-3.392E1, pyunits.J/pyunits.mol/pyunits.K),  # [1]
+                            'B': (4.739E-1, pyunits.J/pyunits.mol/pyunits.K**2),
+                            'C': (-3.017E-4, pyunits.J/pyunits.mol/pyunits.K**3),
+                            'D': (7.130E-8, pyunits.J/pyunits.mol/pyunits.K**4)},
+                        "cp_mol_liq_comp_coeff": {
+                            '1': (1.29E5,
+                                  pyunits.J*pyunits.kmol**-1*pyunits.K**-1),  # [2]
+                            '2': (-1.7E2,
+                                  pyunits.J*pyunits.kmol**-1*pyunits.K**-2),
+                            '3': (6.48E-1,
+                                  pyunits.J*pyunits.kmol**-1*pyunits.K**-3),
+                            '4': (0,
+                                  pyunits.J*pyunits.kmol**-1*pyunits.K**-4),
+                            '5': (0,
+                                  pyunits.J*pyunits.kmol**-1*pyunits.K**-5)},
+                        "enth_mol_form_liq_comp_ref": (
+                            49.0e3, pyunits.J/pyunits.mol),  # [3]
+                        "enth_mol_form_vap_comp_ref": (
+                            82.9e3, pyunits.J/pyunits.mol),  # [3]
+                        "pressure_sat_comp_coeff": {
+                            'A': (9.60362, None),  # [4]
+                            'B': (1701.073, pyunits.K),
+                            'C': (20.806, pyunits.K)}}},
         'toluene': {"type": Component,
                     "dens_mol_liq_comp": Perrys,
                     "enth_mol_liq_comp": Perrys,
@@ -89,51 +102,66 @@ configuration = {
                     "pressure_sat_comp": NIST,
                     "phase_equilibrium_form": {("Vap", "Liq"): fugacity},
                     "parameter_data": {
-                        "mw": 92.1405E-3,  # [1]
-                        "pressure_crit": 41e5,  # [1]
-                        "temperature_crit": 591.8,  # [1]
-                        "dens_mol_liq_comp_coeff": {'1': 0.8488*1e3,  # [2] pg. 2-98
-                                                    '2': 0.26655,
-                                                    '3': 591.8,
-                                                    '4': 0.2878},
-                        "cp_mol_ig_comp_coeff": {'A': -2.435E1,
-                                                 'B': 5.125E-1,
-                                                 'C': -2.765E-4,
-                                                 'D': 4.911E-8},
-                        "cp_mol_liq_comp_coeff": {'1': 1.40E2,  # [2]
-                                                  '2': -1.52E-1,
-                                                  '3': 6.95E-4,
-                                                  '4': 0,
-                                                  '5': 0},
-                        "enth_mol_form_liq_comp_ref": 12.0e3,  # [3]
-                        "enth_mol_form_vap_comp_ref": 50.1e3,  # [3]
-                        "pressure_sat_comp_coeff": {'A': 9.54436,  # [4]
-                                                    'B': 1738.123,
-                                                    'C': 0.394}}},
+                        "mw": (92.1405E-3, pyunits.kg/pyunits.mol),  # [1]
+                        "pressure_crit": (41e5, pyunits.Pa),  # [1]
+                        "temperature_crit": (591.8, pyunits.K),  # [1]
+                        "dens_mol_liq_comp_coeff": {
+                            '1': (0.8488, pyunits.kmol*pyunits.m**-3),  # [2] pg. 2-98
+                            '2': (0.26655, None),
+                            '3': (591.8, pyunits.K),
+                            '4': (0.2878, None)},
+                        "cp_mol_ig_comp_coeff": {
+                            'A': (-2.435E1, pyunits.J/pyunits.mol/pyunits.K),
+                            'B': (5.125E-1, pyunits.J/pyunits.mol/pyunits.K**2),
+                            'C': (-2.765E-4, pyunits.J/pyunits.mol/pyunits.K**3),
+                            'D': (4.911E-8, pyunits.J/pyunits.mol/pyunits.K**4)},
+                        "cp_mol_liq_comp_coeff": {
+                            '1': (1.40E5,
+                                  pyunits.J*pyunits.kmol**-1*pyunits.K**-1),  # [2]
+                            '2': (-1.522,
+                                  pyunits.J*pyunits.kmol**-1*pyunits.K**-2),
+                            '3': (6.95E-1,
+                                  pyunits.J*pyunits.kmol**-1*pyunits.K**-3),
+                            '4': (0,
+                                  pyunits.J*pyunits.kmol**-1*pyunits.K**-4),
+                            '5': (0,
+                                  pyunits.J*pyunits.kmol**-1*pyunits.K**-5)},
+                        "enth_mol_form_liq_comp_ref": (
+                            12.0e3, pyunits.J/pyunits.mol),  # [3]
+                        "enth_mol_form_vap_comp_ref": (
+                            50.1e3, pyunits.J/pyunits.mol),  # [3]
+                        "pressure_sat_comp_coeff": {
+                            'A': (9.54436, None),  # [4]
+                            'B': (1738.123, pyunits.K),
+                            'C': (0.394, pyunits.K)}}},
         'hydrogen': {"type": Component,
                      "valid_phase_types": PT.vaporPhase,
                      "enth_mol_ig_comp": RPP,
                      "parameter_data": {
-                         "mw": 2.016e-3,  # [1]
-                         "pressure_crit": 12.9e5,  # [1]
-                         "temperature_crit": 33.0,  # [1]
-                         "cp_mol_ig_comp_coeff": {'A': 2.714e1,
-                                                  'B': 9.274e-3,
-                                                  'C': -1.381e-5,
-                                                  'D': 7.645e-9},
-                         "enth_mol_form_vap_comp_ref": 0}},  # standard state
+                         "mw": (2.016e-3, pyunits.kg/pyunits.mol),  # [1]
+                         "pressure_crit": (12.9e5, pyunits.Pa),  # [1]
+                         "temperature_crit": (33.0, pyunits.K),  # [1]
+                         "cp_mol_ig_comp_coeff": {
+                             'A': (2.714e1, pyunits.J/pyunits.mol/pyunits.K),
+                             'B': (9.274e-3, pyunits.J/pyunits.mol/pyunits.K**2),
+                             'C': (-1.381e-5, pyunits.J/pyunits.mol/pyunits.K**3),
+                             'D': (7.645e-9, pyunits.J/pyunits.mol/pyunits.K**4)},
+                         "enth_mol_form_vap_comp_ref": (
+                             0, pyunits.J/pyunits.mol)}},  # standard state
         'methane': {"type": Component,
                     "valid_phase_types": PT.vaporPhase,
                     "enth_mol_ig_comp": RPP,
                     "parameter_data": {
-                        "mw": 16.043e-3,  # [1]
-                        "pressure_crit": 46e5,  # [1]
-                        "temperature_crit": 190.4,  # [1]
-                        "cp_mol_ig_comp_coeff": {'A': 1.925e1,
-                                                 'B': 5.213e-2,
-                                                 'C': 1.197e-5,
-                                                 'D': -1.132e-8},
-                        "enth_mol_form_vap_comp_ref": 75e3}}},  # [3]
+                        "mw": (16.043e-3, pyunits.kg/pyunits.mol),  # [1]
+                        "pressure_crit": (46e5, pyunits.Pa),  # [1]
+                        "temperature_crit": (190.4, pyunits.K),  # [1]
+                        "cp_mol_ig_comp_coeff": {
+                            'A': (1.925e1, pyunits.J/pyunits.mol/pyunits.K),
+                            'B': (5.213e-2, pyunits.J/pyunits.mol/pyunits.K**2),
+                            'C': (1.197e-5, pyunits.J/pyunits.mol/pyunits.K**3),
+                            'D': (-1.132e-8, pyunits.J/pyunits.mol/pyunits.K**4)},
+                        "enth_mol_form_vap_comp_ref": (
+                            75e3, pyunits.J/pyunits.mol)}}},  # [3]
 
     # Specifying phases
     "phases":  {'Liq': {"type": LiquidPhase,
@@ -141,13 +169,20 @@ configuration = {
                 'Vap': {"type": VaporPhase,
                         "equation_of_state": Ideal}},
 
+    # Set base units of measurement
+    "base_units": {"time": pyunits.s,
+                   "length": pyunits.m,
+                   "mass": pyunits.kg,
+                   "amount": pyunits.mol,
+                   "temperature": pyunits.K},
+
     # Specifying state definition
     "state_definition": FpcTP,
-    "state_bounds": {"flow_mol_comp": (0, 1000),
-                     "temperature": (273.15, 1000),
-                     "pressure": (5e4, 1e6)},
-    "pressure_ref": 1e5,
-    "temperature_ref": 300,
+    "state_bounds": {"flow_mol_comp": (0, 100, 1000, pyunits.mol/pyunits.s),
+                     "temperature": (273.15, 300, 1000, pyunits.K),
+                     "pressure": (5e4, 1e5, 1e6, pyunits.Pa)},
+    "pressure_ref": (101325, pyunits.Pa),
+    "temperature_ref": (300, pyunits.K),
 
     # Defining phase equilibria
     "phases_in_equilibrium": [("Vap", "Liq")],
