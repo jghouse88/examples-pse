@@ -24,8 +24,9 @@ from pyomo.environ import (Constraint,
                            Param,
                            PositiveReals,
                            Set,
-                           Var)
-from pyomo.environ import units as pyunits
+                           Var,
+                           units as pyunits)
+
 # Import IDAES cores
 from idaes.core import (declare_process_block_class,
                         MaterialFlowBasis,
@@ -53,7 +54,7 @@ class HDAReactionParameterData(ReactionParameterBlock):
         '''
         super(HDAReactionParameterData, self).build()
 
-        self.reaction_block_class = HDAReactionBlock
+        self._reaction_block_class = HDAReactionBlock
 
         # List of valid phases in property package
         self.phase_list = Set(initialize=['Vap'])
@@ -97,7 +98,7 @@ class HDAReactionParameterData(ReactionParameterBlock):
                 })
         obj.add_default_units({'time': pyunits.s,
                                'length': pyunits.m,
-                               'mass':  pyunits.kg,
+                               'mass': pyunits.g,
                                'amount': pyunits.mol,
                                'temperature': pyunits.K})
 
