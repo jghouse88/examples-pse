@@ -25,7 +25,7 @@ from pyomo.environ import (Constraint,
                            PositiveReals,
                            Set,
                            Var)
-
+from pyomo.environ import units as pyunits
 # Import IDAES cores
 from idaes.core import (declare_process_block_class,
                         MaterialFlowBasis,
@@ -95,13 +95,11 @@ class HDAReactionParameterData(ReactionParameterBlock):
                 'k_rxn': {'method': '_rate_constant', 'units': 'm^3/mol.s'},
                 'reaction_rate': {'method': "_rxn_rate", 'units': 'mol/m^3.s'}
                 })
-        obj.add_default_units({'time': 's',
-                               'length': 'm',
-                               'mass': 'g',
-                               'amount': 'mol',
-                               'temperature': 'K',
-                               'energy': 'J',
-                               'holdup': 'mol'})
+        obj.add_default_units({'time': pyunits.s,
+                               'length': pyunits.m,
+                               'mass':  pyunits.kg,
+                               'amount': pyunits.mol,
+                               'temperature': pyunits.K})
 
 
 class ReactionBlock(ReactionBlockBase):

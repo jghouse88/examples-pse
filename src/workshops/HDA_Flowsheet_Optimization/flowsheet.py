@@ -6,6 +6,7 @@ Created on Fri Oct  2 13:44:20 2020
 @author: andrew
 """
 
+import argparse
 from pyomo.environ import (Constraint,
                            Var,
                            ConcreteModel,
@@ -33,11 +34,23 @@ import idaes.logger as idaeslog
 from idaes.generic_models.properties.core.generic.generic_property import GenericParameterBlock
 from BTHM_ideal import configuration
 import hda_reaction as reaction_props
+from hda_ideal_VLE import HDAParameterBlock
 
 m = ConcreteModel()
 m.fs = FlowsheetBlock(default={"dynamic": False})
 
-m.fs.thermo_params = GenericParameterBlock(default=configuration)
+parser = argparse.ArgumentParser(description='Select case to simulate')
+parser.add_argument("--prop",
+                    choices=["oldprop", "genericprop"],
+                    default="genericprop",
+                    help="Prop pack to use")
+
+args = parser.parse_args()
+if args.prop == "genericprop":
+    m.fs.thermo_params = GenericParameterBlock(default=configuration)
+else:
+    m.fs.thermo_params = HDAParameterBlock()
+
 m.fs.reaction_params = reaction_props.HDAReactionParameterBlock(
         default={"property_package": m.fs.thermo_params})
 
@@ -62,16 +75,16 @@ m.fs.F101 = Flash(default={"property_package": m.fs.thermo_params,
 m.fs.S101 = Splitter(default={"property_package": m.fs.thermo_params,
                                "ideal_separation": False,
                                "outlet_list": ["purge", "recycle"]})
-    
+
 
 m.fs.C101 = PressureChanger(default={
             "property_package": m.fs.thermo_params,
             "compressor": True,
             "thermodynamic_assumption": ThermodynamicAssumption.isothermal})
-    
-# m.fs.F102 = Flash(default={"property_package": m.fs.thermo_params,
-#                            "has_heat_transfer": True,
-#                            "has_pressure_change": True})
+
+m.fs.F102 = Flash(default={"property_package": m.fs.thermo_params,
+                           "has_heat_transfer": True,
+                           "has_pressure_change": True})
 
 m.fs.s03 = Arc(source=m.fs.M101.outlet, destination=m.fs.H101.inlet)
 m.fs.s04 = Arc(source=m.fs.H101.outlet, destination=m.fs.R101.inlet)
@@ -80,7 +93,7 @@ m.fs.s06 = Arc(source=m.fs.F101.vap_outlet, destination=m.fs.S101.inlet)
 m.fs.s08 = Arc(source=m.fs.S101.recycle, destination=m.fs.C101.inlet)
 m.fs.s09 = Arc(source=m.fs.C101.outlet,
                destination=m.fs.M101.vapor_recycle)
-# m.fs.s10 = Arc(source=m.fs.F101.liq_outlet, destination=m.fs.F102.inlet)
+m.fs.s10 = Arc(source=m.fs.F101.liq_outlet, destination=m.fs.F102.inlet)
 
 TransformationFactory("network.expand_arcs").apply_to(m)
 
@@ -120,8 +133,8 @@ m.fs.R101.heat_duty.fix(0)
 m.fs.F101.vap_outlet.temperature.fix(325.0)
 m.fs.F101.deltaP.fix(0)
 
-# m.fs.F102.vap_outlet.temperature.fix(370)  # reduced T here
-# m.fs.F102.deltaP.fix(-200000)
+m.fs.F102.vap_outlet.temperature.fix(370)  # reduced T here
+m.fs.F102.deltaP.fix(-200000)
 
 m.fs.S101.split_fraction[0, "purge"].fix(0.2)
 m.fs.C101.outlet.pressure.fix(350000)
@@ -140,7 +153,7 @@ order = seq.calculation_order(G)
 
 for o in heuristic_tear_set:
     print(o.name)
-    
+
 for o in order:
     print(o[0].name)
 
@@ -179,6 +192,5 @@ seq.run(m, function)
 solver = SolverFactory('ipopt')
 solver.solve(m, tee=True)
 
-m.fs.F101.vap_outlet.display()
-m.fs.F101.liq_outlet.display()
-m.fs.S101.purge.display()
+m.fs.F101.report()
+m.fs.F102.report()
