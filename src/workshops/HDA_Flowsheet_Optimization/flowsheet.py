@@ -82,9 +82,9 @@ m.fs.C101 = PressureChanger(default={
             "compressor": True,
             "thermodynamic_assumption": ThermodynamicAssumption.isothermal})
 
-m.fs.F102 = Flash(default={"property_package": m.fs.thermo_params,
-                           "has_heat_transfer": True,
-                           "has_pressure_change": True})
+# m.fs.F102 = Flash(default={"property_package": m.fs.thermo_params,
+#                            "has_heat_transfer": True,
+#                            "has_pressure_change": True})
 
 m.fs.s03 = Arc(source=m.fs.M101.outlet, destination=m.fs.H101.inlet)
 m.fs.s04 = Arc(source=m.fs.H101.outlet, destination=m.fs.R101.inlet)
@@ -93,29 +93,52 @@ m.fs.s06 = Arc(source=m.fs.F101.vap_outlet, destination=m.fs.S101.inlet)
 m.fs.s08 = Arc(source=m.fs.S101.recycle, destination=m.fs.C101.inlet)
 m.fs.s09 = Arc(source=m.fs.C101.outlet,
                destination=m.fs.M101.vapor_recycle)
-m.fs.s10 = Arc(source=m.fs.F101.liq_outlet, destination=m.fs.F102.inlet)
+# m.fs.s10 = Arc(source=m.fs.F101.liq_outlet, destination=m.fs.F102.inlet)
 
 TransformationFactory("network.expand_arcs").apply_to(m)
 
 print(degrees_of_freedom(m))
 
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "benzene"].fix(1e-5)
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "toluene"].fix(1e-5)
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "hydrogen"].fix(1e-5)
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "methane"].fix(1e-5)
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "benzene"].fix(1e-5)
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "toluene"].fix(0.30)
-m.fs.M101.toluene_feed.temperature.fix(303.2)
-m.fs.M101.toluene_feed.pressure.fix(350000)
+if args.prop == "genericprop":
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "benzene"].fix(1e-5)
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "toluene"].fix(1e-5)
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "hydrogen"].fix(1e-5)
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "methane"].fix(1e-5)
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "benzene"].fix(1e-5)
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "toluene"].fix(0.30)
+    m.fs.M101.toluene_feed.temperature.fix(303.2)
+    m.fs.M101.toluene_feed.pressure.fix(350000)
 
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "benzene"].fix(1e-5)
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "toluene"].fix(1e-5)
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "hydrogen"].fix(0.30)
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "methane"].fix(0.02)
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "benzene"].fix(1e-5)
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "toluene"].fix(1e-5)
-m.fs.M101.hydrogen_feed.temperature.fix(303.2)
-m.fs.M101.hydrogen_feed.pressure.fix(350000)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "benzene"].fix(1e-5)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "toluene"].fix(1e-5)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "hydrogen"].fix(0.30)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "methane"].fix(0.02)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "benzene"].fix(1e-5)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "toluene"].fix(1e-5)
+    m.fs.M101.hydrogen_feed.temperature.fix(303.2)
+    m.fs.M101.hydrogen_feed.pressure.fix(350000)
+else:
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "benzene"].fix(1e-5)
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "toluene"].fix(1e-5)
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "hydrogen"].fix(1e-5)
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "methane"].fix(1e-5)
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "benzene"].fix(1e-5)
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "toluene"].fix(0.30)
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "hydrogen"].fix(1e-5)
+    m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "methane"].fix(1e-5)
+    m.fs.M101.toluene_feed.temperature.fix(303.2)
+    m.fs.M101.toluene_feed.pressure.fix(350000)
+
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "benzene"].fix(1e-5)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "toluene"].fix(1e-5)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "hydrogen"].fix(0.30)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "methane"].fix(0.02)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "benzene"].fix(1e-5)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "toluene"].fix(1e-5)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "hydrogen"].fix(1e-5)
+    m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "methane"].fix(1e-5)
+    m.fs.M101.hydrogen_feed.temperature.fix(303.2)
+    m.fs.M101.hydrogen_feed.pressure.fix(350000)
 
 m.fs.H101.outlet.temperature.fix(600)
 
@@ -133,8 +156,8 @@ m.fs.R101.heat_duty.fix(0)
 m.fs.F101.vap_outlet.temperature.fix(325.0)
 m.fs.F101.deltaP.fix(0)
 
-m.fs.F102.vap_outlet.temperature.fix(370)  # reduced T here
-m.fs.F102.deltaP.fix(-200000)
+# m.fs.F102.vap_outlet.temperature.fix(370)  # reduced T here
+# m.fs.F102.deltaP.fix(-200000)
 
 m.fs.S101.split_fraction[0, "purge"].fix(0.2)
 m.fs.C101.outlet.pressure.fix(350000)
@@ -157,17 +180,30 @@ for o in heuristic_tear_set:
 for o in order:
     print(o[0].name)
 
-tear_guesses = {
-        "flow_mol_phase_comp": {
-                (0, "Vap", "benzene"): 1e-5,
-                (0, "Vap", "toluene"): 1e-5,
-                (0, "Vap", "hydrogen"): 0.30,
-                (0, "Vap", "methane"): 0.02,
-                (0, "Liq", "benzene"): 1e-5,
-                (0, "Liq", "toluene"): 0.30},
-        "temperature": {0: 303},
-        "pressure": {0: 350000}}
-
+if args.prop == "genericprop":
+    tear_guesses = {
+            "flow_mol_phase_comp": {
+                    (0, "Vap", "benzene"): 1e-5,
+                    (0, "Vap", "toluene"): 1e-5,
+                    (0, "Vap", "hydrogen"): 0.30,
+                    (0, "Vap", "methane"): 0.02,
+                    (0, "Liq", "benzene"): 1e-5,
+                    (0, "Liq", "toluene"): 0.30},
+            "temperature": {0: 303},
+            "pressure": {0: 350000}}
+else:
+    tear_guesses = {
+            "flow_mol_phase_comp": {
+                    (0, "Vap", "benzene"): 1e-5,
+                    (0, "Vap", "toluene"): 1e-5,
+                    (0, "Vap", "hydrogen"): 0.30,
+                    (0, "Vap", "methane"): 0.02,
+                    (0, "Liq", "benzene"): 1e-5,
+                    (0, "Liq", "toluene"): 0.30,
+                    (0, "Liq", "hydrogen"): 1e-5,
+                    (0, "Liq", "methane"): 1e-5},
+            "temperature": {0: 303},
+            "pressure": {0: 350000}}
 # Pass the tear_guess to the SD tool
 seq.set_guesses_for(m.fs.H101.inlet, tear_guesses)
 
@@ -193,4 +229,4 @@ solver = SolverFactory('ipopt')
 solver.solve(m, tee=True)
 
 m.fs.F101.report()
-m.fs.F102.report()
+# m.fs.F102.report()
