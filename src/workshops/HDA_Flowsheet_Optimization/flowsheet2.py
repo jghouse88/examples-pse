@@ -30,13 +30,14 @@ from idaes.core.util.model_statistics import degrees_of_freedom
 # Import idaes logger to set output levels
 import idaes.logger as idaeslog
 
+from idaes.generic_models.properties.core.generic.generic_property import GenericParameterBlock
+from BTHM_ideal import configuration
 import hda_reaction as reaction_props
-from hda_ideal_VLE import HDAParameterBlock
 
 m = ConcreteModel()
 m.fs = FlowsheetBlock(default={"dynamic": False})
 
-m.fs.thermo_params = HDAParameterBlock()
+m.fs.thermo_params = GenericParameterBlock(default=configuration)
 
 m.fs.reaction_params = reaction_props.HDAReactionParameterBlock(
         default={"property_package": m.fs.thermo_params})
@@ -51,7 +52,7 @@ m.fs.H101 = Heater(default={"property_package": m.fs.thermo_params,
 m.fs.R101 = StoichiometricReactor(
             default={"property_package": m.fs.thermo_params,
                      "reaction_package": m.fs.reaction_params,
-                     "has_heat_of_reaction": True,
+                     "has_heat_of_reaction": False,
                      "has_heat_transfer": True,
                      "has_pressure_change": False})
 
@@ -92,8 +93,6 @@ m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "hydrogen"].fix(1e-5)
 m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "methane"].fix(1e-5)
 m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "benzene"].fix(1e-5)
 m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "toluene"].fix(0.30)
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "hydrogen"].fix(1e-5)
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "methane"].fix(1e-5)
 m.fs.M101.toluene_feed.temperature.fix(303.2)
 m.fs.M101.toluene_feed.pressure.fix(350000)
 
@@ -103,8 +102,6 @@ m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "hydrogen"].fix(0.30)
 m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "methane"].fix(0.02)
 m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "benzene"].fix(1e-5)
 m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "toluene"].fix(1e-5)
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "hydrogen"].fix(1e-5)
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "methane"].fix(1e-5)
 m.fs.M101.hydrogen_feed.temperature.fix(303.2)
 m.fs.M101.hydrogen_feed.pressure.fix(350000)
 
@@ -156,11 +153,10 @@ tear_guesses = {
                 (0, "Vap", "hydrogen"): 0.30,
                 (0, "Vap", "methane"): 0.02,
                 (0, "Liq", "benzene"): 1e-5,
-                (0, "Liq", "toluene"): 0.30,
-                (0, "Liq", "hydrogen"): 1e-5,
-                (0, "Liq", "methane"): 1e-5},
+                (0, "Liq", "toluene"): 0.30},
         "temperature": {0: 303},
         "pressure": {0: 350000}}
+
 # Pass the tear_guess to the SD tool
 seq.set_guesses_for(m.fs.H101.inlet, tear_guesses)
 

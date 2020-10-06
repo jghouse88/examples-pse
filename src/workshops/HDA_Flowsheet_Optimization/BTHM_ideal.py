@@ -88,9 +88,9 @@ configuration = {
                             '5': (0,
                                   pyunits.J*pyunits.kmol**-1*pyunits.K**-5)},
                         "enth_mol_form_liq_comp_ref": (
-                            49.0e3, pyunits.J/pyunits.mol),  # [3]
+                            -49.0e3, pyunits.J/pyunits.mol),  # [3]
                         "enth_mol_form_vap_comp_ref": (
-                            82.9e3, pyunits.J/pyunits.mol),  # [3]
+                            -82.9e3, pyunits.J/pyunits.mol),  # [3]
                         "pressure_sat_comp_coeff": {
                             'A': (4.60362, None),  # [4]
                             'B': (1701.073, pyunits.K),
@@ -127,9 +127,9 @@ configuration = {
                             '5': (0,
                                   pyunits.J*pyunits.kmol**-1*pyunits.K**-5)},
                         "enth_mol_form_liq_comp_ref": (
-                            12.0e3, pyunits.J/pyunits.mol),  # [3]
+                            -12.0e3, pyunits.J/pyunits.mol),  # [3]
                         "enth_mol_form_vap_comp_ref": (
-                            50.1e3, pyunits.J/pyunits.mol),  # [3]
+                            -50.1e3, pyunits.J/pyunits.mol),  # [3]
                         "pressure_sat_comp_coeff": {
                             'A': (4.54436, None),  # [4]
                             'B': (1738.123, pyunits.K),
@@ -161,7 +161,7 @@ configuration = {
                             'C': (1.197e-5, pyunits.J/pyunits.mol/pyunits.K**3),
                             'D': (-1.132e-8, pyunits.J/pyunits.mol/pyunits.K**4)},
                         "enth_mol_form_vap_comp_ref": (
-                            75e3, pyunits.J/pyunits.mol)}}},  # [3]
+                            -75e3, pyunits.J/pyunits.mol)}}},  # [3]
 
     # Specifying phases
     "phases":  {'Liq': {"type": LiquidPhase,
