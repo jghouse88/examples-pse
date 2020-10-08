@@ -60,6 +60,10 @@ parser.add_argument("--optimize",
 args = parser.parse_args()
 if args.prop == "genericprop":
     m.fs.thermo_params = GenericParameterBlock(default=configuration)
+    m.fs.pre_heater = Heater(default={"property_package": m.fs.thermo_params,
+                                      "has_pressure_change": True,
+                                      "has_phase_equilibrium": True})
+
 else:
     m.fs.thermo_params = HDAParameterBlock()
     m.fs.bt_properties = BTXParameterBlock(default={
@@ -159,7 +163,8 @@ m.fs.s09 = Arc(source=m.fs.C101.outlet,
                destination=m.fs.M101.vapor_recycle)
 
 if args.prop == "genericprop":
-    pass
+    m.fs.s10 = Arc(source=m.fs.F101.liq_outlet,
+                   destination=m.fs.pre_heater.inlet)
 else:
     m.fs.s10 = Arc(source=m.fs.F101.liq_outlet,
                    destination=m.fs.translator.inlet)
@@ -236,8 +241,12 @@ m.fs.S101.split_fraction[0, "purge"].fix(0.2)
 m.fs.C101.outlet.pressure.fix(350000)
 
 # Set heater outlet conditions (set outlet 2 phase)
-m.fs.pre_heater.outlet.temperature.fix(375)
-m.fs.pre_heater.deltaP.fix(-200000)
+if args.prop == "genericprop":
+    m.fs.pre_heater.outlet.temperature.fix(370)
+    m.fs.pre_heater.deltaP.fix(-200000)
+else:
+    m.fs.pre_heater.outlet.temperature.fix(375)
+    m.fs.pre_heater.deltaP.fix(-200000)
 
 # # distillation level inputs
 # m.fs.distillation.condenser.reflux_ratio.fix(1.4)
@@ -305,16 +314,31 @@ seq.run(m, function)
 solver = get_default_solver()
 solver.solve(m, tee=True)
 
-m.fs.distillation = TrayColumn(default={
-                               "number_of_trays": 10,
-                               "feed_tray_location": 5,
-                               "condenser_type":
-                                   CondenserType.totalCondenser,
-                               "condenser_temperature_spec":
-                                   TemperatureSpec.atBubblePoint,
-                                   "property_package": m.fs.bt_properties,
-                                   "has_heat_transfer": False,
-                                   "has_pressure_change": False})
+m.fs.F101.report()
+m.fs.pre_heater.report()
+
+if args.prop == "genericprop":
+    m.fs.distillation = TrayColumn(default={
+                                   "number_of_trays": 10,
+                                   "feed_tray_location": 5,
+                                   "condenser_type":
+                                       CondenserType.totalCondenser,
+                                   "condenser_temperature_spec":
+                                       TemperatureSpec.atBubblePoint,
+                                       "property_package": m.fs.thermo_params,
+                                       "has_heat_transfer": False,
+                                       "has_pressure_change": False})
+else:
+    m.fs.distillation = TrayColumn(default={
+                                   "number_of_trays": 10,
+                                   "feed_tray_location": 5,
+                                   "condenser_type":
+                                       CondenserType.totalCondenser,
+                                   "condenser_temperature_spec":
+                                       TemperatureSpec.atBubblePoint,
+                                       "property_package": m.fs.bt_properties,
+                                       "has_heat_transfer": False,
+                                       "has_pressure_change": False})
 
 m.fs.s12 = Arc(source=m.fs.pre_heater.outlet,
                destination=m.fs.distillation.tray[5].feed)
@@ -333,7 +357,7 @@ propagate_state(m.fs.s12)
 
 m.fs.distillation.initialize()
 
-m.fs.distillation.condenser.reflux_ratio.fix(1.4)
+# m.fs.distillation.condenser.reflux_ratio.fix(1.4)
 solver.solve(m, tee=True)
 
 # simulation results
@@ -383,10 +407,10 @@ if args.optimize:
     m.fs.distillation.condenser.condenser_pressure.setlb(101325)
     m.fs.distillation.condenser.condenser_pressure.setub(150000)
 
-    m.fs.distillation.condenser.reflux_ratio.setlb(0.5)
+    m.fs.distillation.condenser.reflux_ratio.setlb(0.1)
     m.fs.distillation.condenser.reflux_ratio.setub(1.5)
 
-    m.fs.distillation.reboiler.boilup_ratio.setlb(0.5)
+    m.fs.distillation.reboiler.boilup_ratio.setlb(0.1)
     m.fs.distillation.reboiler.boilup_ratio.setub(1.5)
 
     m.fs.overhead_loss = Constraint(
@@ -401,13 +425,30 @@ if args.optimize:
 
     solver.solve(m, tee=True)
 
-    m.fs.H101.outlet.temperature.display()
-    m.fs.R101.outlet.temperature.display()
-    m.fs.F101.vap_outlet.temperature.display()
-    m.fs.pre_heater.outlet.temperature.display()
-    m.fs.distillation.condenser.condenser_pressure.display()
-    m.fs.distillation.condenser.reflux_ratio.display()
-    m.fs.distillation.reboiler.boilup_ratio.display()
+    print("Optimal operating variables:")
+    print("optimal H101 temperature is ",
+          value(m.fs.H101.outlet.temperature[0]))
+    print("optimal R101 temperature is ",
+          value(m.fs.R101.outlet.temperature[0]))
+    print("optimal F101 outlet temperature is ",
+          value(m.fs.F101.vap_outlet.temperature[0]))
+    print("optimal pre_heater outlet temperature is ",
+          value(m.fs.pre_heater.outlet.temperature[0]))
+    print("optimal condenser pressure is ",
+          value(m.fs.distillation.condenser.condenser_pressure[0]))
+    print("optimal reflux ratio is ",
+          value(m.fs.distillation.condenser.reflux_ratio))
+    print("optimal boil up ratio is ",
+          value(m.fs.distillation.reboiler.boilup_ratio))
 
+    print("Column Report")
     m.fs.distillation.condenser.report()
     m.fs.distillation.reboiler.report()
+    print("Liquid stream flow")
+    m.fs.distillation.tray[:].liq_out.flow_mol.value
+    print("Vapor stream flow")
+    m.fs.distillation.tray[:].vap_out.flow_mol.display()
+    print("Tray temperature profile")
+    m.fs.distillation.tray[:].vap_out.temperature.display()
+    print("Tray pressure profile")
+    m.fs.distillation.tray[:].vap_out.pressure.display()
