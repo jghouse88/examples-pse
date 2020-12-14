@@ -71,6 +71,7 @@ else:
                                            ('Liq', 'Vap'),
                                            "activity_coeff_model":
                                            "Ideal"})
+
     m.fs.translator = Translator(default={
                                  "inlet_property_package": m.fs.thermo_params,
                                  "outlet_property_package":
@@ -79,6 +80,7 @@ else:
     m.fs.pre_heater = Heater(default={"property_package": m.fs.bt_properties,
                                       "has_pressure_change": True,
                                       "has_phase_equilibrium": True})
+
     # m.fs.distillation = TrayColumn(default={
     #                                "number_of_trays": 10,
     #                                "feed_tray_location": 5,
@@ -143,7 +145,6 @@ m.fs.F101 = Flash(default={"property_package": m.fs.thermo_params,
 m.fs.S101 = Splitter(default={"property_package": m.fs.thermo_params,
                                "ideal_separation": False,
                                "outlet_list": ["purge", "recycle"]})
-
 
 m.fs.C101 = PressureChanger(default={
             "property_package": m.fs.thermo_params,
