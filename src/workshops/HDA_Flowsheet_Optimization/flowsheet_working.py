@@ -6,14 +6,18 @@ Created on Fri Oct  2 13:44:20 2020
 @author: andrew
 """
 
-from pyomo.environ import (Constraint,
-                           Var,
-                           ConcreteModel,
-                           TransformationFactory)
+from pyomo.environ import (ConcreteModel,
+                           Constraint,
+                           Expression,
+                           Objective,
+                           SolverFactory,
+                           TransformationFactory,
+                           Var)
 from pyomo.network import Arc, SequentialDecomposition
 
 from idaes.core import FlowsheetBlock
-from idaes.generic_models.unit_models import (PressureChanger,
+from idaes.generic_models.unit_models import (Feed,
+                                              PressureChanger,
                                               Mixer,
                                               Separator as Splitter,
                                               Heater,
@@ -28,8 +32,6 @@ from idaes.generic_models.unit_models.pressure_changer \
     import ThermodynamicAssumption
 from idaes.core.util.model_statistics import degrees_of_freedom
 from idaes.core.util.initialization import propagate_state
-from idaes.core.util.testing import get_default_solver
-import idaes.logger as idaeslog
 
 from idaes.generic_models.properties.activity_coeff_models.\
     BTX_activity_coeff_VLE import BTXParameterBlock
@@ -41,51 +43,52 @@ import hda_reaction_kinetic as reaction_props
 m = ConcreteModel()
 m.fs = FlowsheetBlock(default={"dynamic": False})
 
-m.fs.thermo_params = GenericParameterBlock(default=configuration)
-
+m.fs.bthm_params = GenericParameterBlock(default=configuration)
+m.fs.bt_params = BTXParameterBlock(default={
+    "valid_phase": ('Liq', 'Vap'),
+    "activity_coeff_model": "Ideal"})
 m.fs.reaction_params = reaction_props.HDAReactionParameterBlock(
-        default={"property_package": m.fs.thermo_params})
+        default={"property_package": m.fs.bthm_params})
+
+m.fs.toluene_feed = Feed(default={"property_package": m.fs.bthm_params})
+m.fs.hydrogen_feed = Feed(default={"property_package": m.fs.bthm_params})
 
 m.fs.M101 = Mixer(default={
-    "property_package": m.fs.thermo_params,
+    "property_package": m.fs.bthm_params,
     "inlet_list": ["toluene_feed", "hydrogen_feed", "vapor_recycle"]})
 
-m.fs.H101 = Heater(default={"property_package": m.fs.thermo_params,
+m.fs.H101 = Heater(default={"property_package": m.fs.bthm_params,
                             "has_pressure_change": False,
                             "has_phase_equilibrium": True})
 
 m.fs.R101 = CSTR(
-            default={"property_package": m.fs.thermo_params,
+            default={"property_package": m.fs.bthm_params,
                      "reaction_package": m.fs.reaction_params,
                      "has_heat_of_reaction": False,
                      "has_heat_transfer": True,
                      "has_pressure_change": False})
 
-m.fs.F101 = Flash(default={"property_package": m.fs.thermo_params,
+m.fs.F101 = Flash(default={"property_package": m.fs.bthm_params,
                            "has_heat_transfer": True,
                            "has_pressure_change": True})
 
-m.fs.S101 = Splitter(default={"property_package": m.fs.thermo_params,
+m.fs.S101 = Splitter(default={"property_package": m.fs.bthm_params,
                               "ideal_separation": False,
                               "outlet_list": ["purge", "recycle"]})
 
 m.fs.P101 = PressureChanger(default={
-            "property_package": m.fs.thermo_params,
+            "property_package": m.fs.bthm_params,
             "compressor": True,
             "thermodynamic_assumption": ThermodynamicAssumption.isothermal})
 
 # -----------------------------------------------------------------------------
 # Translator and H102
-m.fs.bt_properties = BTXParameterBlock(default={
-    "valid_phase": ('Liq', 'Vap'),
-    "activity_coeff_model": "Ideal"})
-
 m.fs.translator = Translator(default={
-                             "inlet_property_package": m.fs.thermo_params,
+                             "inlet_property_package": m.fs.bthm_params,
                              "outlet_property_package":
-                                 m.fs.bt_properties})
+                                 m.fs.bt_params})
 
-m.fs.H102 = Heater(default={"property_package": m.fs.bt_properties,
+m.fs.H102 = Heater(default={"property_package": m.fs.bt_params,
                             "has_pressure_change": True,
                             "has_phase_equilibrium": True})
 
@@ -118,6 +121,10 @@ m.fs.translator.eq_mole_frac_toluene = Constraint(
 # -----------------------------------------------------------------------------
 
 # Arcs
+m.fs.s01 = Arc(source=m.fs.hydrogen_feed.outlet,
+               destination=m.fs.M101.hydrogen_feed)
+m.fs.s02 = Arc(source=m.fs.toluene_feed.outlet,
+               destination=m.fs.M101.toluene_feed)
 m.fs.s03 = Arc(source=m.fs.M101.outlet, destination=m.fs.H101.inlet)
 m.fs.s04 = Arc(source=m.fs.H101.outlet, destination=m.fs.R101.inlet)
 m.fs.s05 = Arc(source=m.fs.R101.outlet, destination=m.fs.F101.inlet)
@@ -134,23 +141,25 @@ TransformationFactory("network.expand_arcs").apply_to(m)
 
 print(degrees_of_freedom(m))
 
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "benzene"].fix(1e-5)
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "toluene"].fix(1e-5)
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "hydrogen"].fix(1e-5)
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Vap", "methane"].fix(1e-5)
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "benzene"].fix(1e-5)
-m.fs.M101.toluene_feed.flow_mol_phase_comp[0, "Liq", "toluene"].fix(0.30)
-m.fs.M101.toluene_feed.temperature.fix(303.2)
-m.fs.M101.toluene_feed.pressure.fix(350000)
+t_feed = m.fs.toluene_feed
+t_feed.flow_mol_phase_comp[0, "Vap", "benzene"].fix(1e-5)
+t_feed.flow_mol_phase_comp[0, "Vap", "toluene"].fix(1e-5)
+t_feed.flow_mol_phase_comp[0, "Vap", "hydrogen"].fix(1e-5)
+t_feed.flow_mol_phase_comp[0, "Vap", "methane"].fix(1e-5)
+t_feed.flow_mol_phase_comp[0, "Liq", "benzene"].fix(1e-5)
+t_feed.flow_mol_phase_comp[0, "Liq", "toluene"].fix(0.30)
+t_feed.temperature.fix(303.2)
+t_feed.pressure.fix(350000)
 
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "benzene"].fix(1e-5)
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "toluene"].fix(1e-5)
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "hydrogen"].fix(0.30)
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Vap", "methane"].fix(0.02)
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "benzene"].fix(1e-5)
-m.fs.M101.hydrogen_feed.flow_mol_phase_comp[0, "Liq", "toluene"].fix(1e-5)
-m.fs.M101.hydrogen_feed.temperature.fix(303.2)
-m.fs.M101.hydrogen_feed.pressure.fix(350000)
+h_feed = m.fs.hydrogen_feed
+h_feed.flow_mol_phase_comp[0, "Vap", "benzene"].fix(1e-5)
+h_feed.flow_mol_phase_comp[0, "Vap", "toluene"].fix(1e-5)
+h_feed.flow_mol_phase_comp[0, "Vap", "hydrogen"].fix(0.30)
+h_feed.flow_mol_phase_comp[0, "Vap", "methane"].fix(0.02)
+h_feed.flow_mol_phase_comp[0, "Liq", "benzene"].fix(1e-5)
+h_feed.flow_mol_phase_comp[0, "Liq", "toluene"].fix(1e-5)
+h_feed.temperature.fix(303.2)
+h_feed.pressure.fix(350000)
 
 m.fs.H101.outlet.temperature.fix(600)
 
@@ -211,42 +220,127 @@ seq.set_guesses_for(m.fs.H101.inlet, tear_guesses)
 
 
 def function(unit):
-    unit.initialize(outlvl=idaeslog.INFO)
+    unit.initialize()
 
 
 seq.run(m, function)
 
-solver = get_default_solver()
+solver = SolverFactory('ipopt')
 solver.solve(m, tee=True)
 
+# # -----------------------------------------------------------------------------
+# # Distillation
+# m.fs.C101 = TrayColumn(default={
+#     "number_of_trays": 10,
+#     "feed_tray_location": 5,
+#     "condenser_type": CondenserType.totalCondenser,
+#     "condenser_temperature_spec": TemperatureSpec.atBubblePoint,
+#     "property_package": m.fs.bt_params,
+#     "has_heat_transfer": False,
+#     "has_pressure_change": False})
+
+# m.fs.s11 = Arc(source=m.fs.H102.outlet,
+#                 destination=m.fs.C101.tray[5].feed)
+
+# # distillation level inputs
+# m.fs.C101.condenser.reflux_ratio.fix(0.5)
+# m.fs.C101.condenser.condenser_pressure.fix(150000)
+# m.fs.C101.reboiler.boilup_ratio.fix(0.5)
+
+# TransformationFactory("network.expand_arcs").apply_to(m)
+
+# propagate_state(m.fs.s11)
+# m.fs.C101.initialize()
+
+# solver.solve(m, tee=True)
+
 # -----------------------------------------------------------------------------
-# Distillation
-m.fs.C101 = TrayColumn(default={
-    "number_of_trays": 10,
-    "feed_tray_location": 5,
-    "condenser_type": CondenserType.totalCondenser,
-    "condenser_temperature_spec": TemperatureSpec.atBubblePoint,
-    "property_package": m.fs.bt_properties,
-    "has_heat_transfer": False,
-    "has_pressure_change": False})
+# optimize
+# Add operating cost
+m.fs.cooling_cost = Expression(
+    expr=0.212e-7 * (-m.fs.F101.heat_duty[0]) +
+    0.212e-7 * (-m.fs.R101.heat_duty[0]))# +
+    #0.212e-7 * (-m.fs.distillation.condenser.heat_duty[0]))
+m.fs.heating_cost = Expression(
+    expr=2.2e-7 * m.fs.H101.heat_duty[0] +
+    1.2e-7 * m.fs.H102.heat_duty[0])# +
+    #1.9e-7 * m.fs.distillation. reboiler.heat_duty[0])
+m.fs.operating_cost = Expression(
+    expr=(3600 * 24 * 365 * (m.fs.heating_cost + m.fs.cooling_cost)))
 
-m.fs.s11 = Arc(source=m.fs.H102.outlet,
-               destination=m.fs.C101.tray[5].feed)
+m.fs.capital_cost = Expression(
+    expr=4e5*m.fs.R101.volume[0])
 
-# distillation level inputs
-m.fs.C101.condenser.reflux_ratio.fix(0.5)
-m.fs.C101.condenser.condenser_pressure.fix(150000)
-m.fs.C101.reboiler.boilup_ratio.fix(0.5)
+m.fs.total_cost = Expression(
+    expr=m.fs.operating_cost+m.fs.capital_cost)
 
-TransformationFactory("network.expand_arcs").apply_to(m)
+m.fs.objective = Objective(expr=m.fs.total_cost)
 
-propagate_state(m.fs.s11)
-m.fs.C101.initialize()
+
+# Change reactor configuration
+m.fs.R101.conversion.unfix()
+# m.fs.R101.volume.fix()
+
+
+# Unfix degrees of freedom
+m.fs.H101.outlet.temperature.unfix()
+m.fs.R101.heat_duty.unfix()
+m.fs.F101.vap_outlet.temperature.unfix()
+m.fs.H102.outlet.temperature.unfix()
+# m.fs.distillation.condenser.condenser_pressure.unfix()
+# m.fs.distillation.condenser.reflux_ratio.unfix()
+# m.fs.distillation.reboiler.boilup_ratio.unfix()
+
+# Set bounds
+m.fs.H101.outlet.temperature[0].setlb(500)
+m.fs.H101.outlet.temperature[0].setub(600)
+
+m.fs.R101.outlet.temperature[0].setlb(600)
+m.fs.R101.outlet.temperature[0].setub(800)
+m.fs.R101.heat_duty.setlb(-10000)
+m.fs.R101.heat_duty.setub(0)
+m.fs.R101.volume.setlb(0.05)
+m.fs.R101.volume.setub(0.5)
+
+m.fs.F101.vap_outlet.temperature[0].setlb(298.0)
+m.fs.F101.vap_outlet.temperature[0].setub(450.0)
+
+m.fs.H102.outlet.temperature[0].setlb(350)
+m.fs.H102.outlet.temperature[0].setub(400)
+
+# m.fs.distillation.condenser.condenser_pressure.setlb(101325)
+# m.fs.distillation.condenser.condenser_pressure.setub(150000)
+
+# m.fs.distillation.condenser.reflux_ratio.setlb(0.1)
+# m.fs.distillation.condenser.reflux_ratio.setub(1.5)
+
+# m.fs.distillation.reboiler.boilup_ratio.setlb(0.1)
+# m.fs.distillation.reboiler.boilup_ratio.setub(1.5)
+
+# m.fs.overhead_loss = Constraint(
+#     expr=m.fs.F101.vap_outlet.flow_mol_phase_comp[0, "Vap", "benzene"] <=
+#     0.20 * m.fs.R101.outlet.flow_mol_phase_comp[0, "Vap", "benzene"])
+# m.fs.product_flow = Constraint(
+#     expr=m.fs.distillation.condenser.distillate.flow_mol[0] >=
+#     0.15)
+# m.fs.product_purity = Constraint(
+#     expr=m.fs.distillation.condenser.
+#     distillate.mole_frac_comp[0, "benzene"] >= 0.95)
+m.fs.product_flow = Constraint(
+    expr=m.fs.H102.outlet.flow_mol[0] >= 0.25)
+m.fs.product_purity = Constraint(
+    expr=m.fs.H102.outlet.mole_frac_comp[0, "benzene"] >= 0.75)
 
 solver.solve(m, tee=True)
 
 # -----------------------------------------------------------------------------
 m.fs.F101.report()
 m.fs.R101.report()
-m.fs.R101.display()
+# m.fs.R101.display()
 m.fs.H102.report()
+# m.fs.H102.control_volume.properties_out.display()
+
+m.fs.operating_cost.display()
+m.fs.capital_cost.display()
+m.fs.total_cost.display()
+m.fs.R101.conversion.display()
