@@ -81,17 +81,6 @@ else:
                                       "has_pressure_change": True,
                                       "has_phase_equilibrium": True})
 
-    # m.fs.distillation = TrayColumn(default={
-    #                                "number_of_trays": 10,
-    #                                "feed_tray_location": 5,
-    #                                "condenser_type":
-    #                                    CondenserType.totalCondenser,
-    #                                "condenser_temperature_spec":
-    #                                    TemperatureSpec.atBubblePoint,
-    #                                    "property_package": m.fs.bt_properties,
-    #                                    "has_heat_transfer": False,
-    #                                    "has_pressure_change": False})
-
     # Translator constraints linking outlet state variables to inlet
     # state variables
     m.fs.translator.eq_total_flow = Constraint(
@@ -119,13 +108,12 @@ else:
         (m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "benzene"] +
          m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "toluene"]))
 
-
-
 m.fs.reaction_params = reaction_props.HDAReactionParameterBlock(
         default={"property_package": m.fs.thermo_params})
 
-m.fs.M101 = Mixer(default={"property_package": m.fs.thermo_params,
-                           "inlet_list": ["toluene_feed", "hydrogen_feed", "vapor_recycle"]})
+m.fs.M101 = Mixer(default={
+    "property_package": m.fs.thermo_params,
+    "inlet_list": ["toluene_feed", "hydrogen_feed", "vapor_recycle"]})
 
 m.fs.H101 = Heater(default={"property_package": m.fs.thermo_params,
                             "has_pressure_change": False,
@@ -342,7 +330,7 @@ else:
                                        "has_pressure_change": False})
 
 m.fs.s12 = Arc(source=m.fs.pre_heater.outlet,
-               destination=m.fs.distillation.tray[5].feed)
+               destination=m.fs.distillation.feed)
 
 # distillation level inputs
 m.fs.distillation.condenser.reflux_ratio.fix(0.5)
@@ -445,11 +433,3 @@ if args.optimize:
     print("Column Report")
     m.fs.distillation.condenser.report()
     m.fs.distillation.reboiler.report()
-    print("Liquid stream flow")
-    m.fs.distillation.tray[:].liq_out.flow_mol.value
-    print("Vapor stream flow")
-    m.fs.distillation.tray[:].vap_out.flow_mol.display()
-    print("Tray temperature profile")
-    m.fs.distillation.tray[:].vap_out.temperature.display()
-    print("Tray pressure profile")
-    m.fs.distillation.tray[:].vap_out.pressure.display()
