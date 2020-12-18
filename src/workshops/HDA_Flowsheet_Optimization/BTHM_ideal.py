@@ -178,7 +178,7 @@ configuration = {
 
     # Specifying state definition
     "state_definition": FpcTP,
-    "state_bounds": {"flow_mol_comp": (0, 100, 1000, pyunits.mol/pyunits.s),
+    "state_bounds": {"flow_mol_phase_comp": (0, 100, 1000, pyunits.mol/pyunits.s),
                      "temperature": (273.15, 300, 1000, pyunits.K),
                      "pressure": (5e4, 1e5, 1e6, pyunits.Pa)},
     "pressure_ref": (101325, pyunits.Pa),
