@@ -22,6 +22,7 @@ from pyomo.environ import (Constraint,
                            exp,
                            Set,
                            Var,
+                           Param,
                            units as pyunits)
 
 # Import IDAES cores
@@ -31,6 +32,7 @@ from idaes.core import (declare_process_block_class,
                         ReactionBlockDataBase,
                         ReactionBlockBase)
 from idaes.core.util.constants import Constants as const
+from idaes.core.util.misc import add_object_reference
 
 # Set up logger
 _log = logging.getLogger(__name__)
@@ -87,6 +89,17 @@ class HDAReactionParameterData(ReactionParameterBlock):
                                      doc="Activation energy")
         self.energy_activation.fix()
 
+        # Heat of Reaction
+        dh_rxn_dict = {"R1": -1.08e5}
+        self.dh_rxn = Param(self.rate_reaction_idx,
+                            initialize=dh_rxn_dict,
+                            doc="Heat of reaction [J/mol]")
+
+        # Gas Constant
+        self.gas_const = Param(mutable=False,
+                               default=8.314,
+                               doc='Gas Constant [J/mol.K]')
+
     @classmethod
     def define_metadata(cls, obj):
         obj.add_properties({
@@ -134,6 +147,12 @@ class HDAReactionBlockData(ReactionBlockDataBase):
         Callable method for Block construction
         """
         super(HDAReactionBlockData, self).build()
+
+        # Heat of reaction - no _ref as this is the actual property
+        add_object_reference(
+                self,
+                "dh_rxn",
+                self.config.parameters.dh_rxn)
 
         self.k_rxn = Var(initialize=0.2)  # TODO: Determine correct units
 

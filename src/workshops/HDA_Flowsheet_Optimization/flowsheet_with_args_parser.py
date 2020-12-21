@@ -7,6 +7,7 @@ Created on Fri Oct  2 13:44:20 2020
 """
 
 import argparse
+import pytest
 from pyomo.environ import (Constraint,
                            Var,
                            ConcreteModel,
@@ -14,9 +15,11 @@ from pyomo.environ import (Constraint,
                            Objective,
                            SolverFactory,
                            TransformationFactory,
-                           value)
+                           value,
+                           TerminationCondition)
 from pyomo.network import Arc, SequentialDecomposition
-
+from pyomo.util.infeasible import log_infeasible_constraints, \
+    log_infeasible_bounds
 from idaes.core import FlowsheetBlock
 from idaes.generic_models.unit_models import (PressureChanger,
                                               Mixer,
@@ -41,7 +44,8 @@ from idaes.generic_models.properties.core.generic.generic_property \
 from idaes.generic_models.properties.activity_coeff_models.\
     BTX_activity_coeff_VLE import BTXParameterBlock
 from BTHM_ideal import configuration
-import hda_reaction as reaction_props
+# import hda_reaction as reaction_props
+import hda_reaction_kinetic as reaction_props
 from hda_ideal_VLE import HDAParameterBlock
 
 m = ConcreteModel()
@@ -55,15 +59,16 @@ parser.add_argument("--prop",
 
 parser.add_argument("--optimize",
                     action="store_true",
-                    help="Flag to run optmization ")
+                    help="Boolean flag to run optmization ")
 
 args = parser.parse_args()
 if args.prop == "genericprop":
     m.fs.thermo_params = GenericParameterBlock(default=configuration)
-    m.fs.pre_heater = Heater(default={"property_package": m.fs.thermo_params,
-                                      "has_pressure_change": True,
-                                      "has_phase_equilibrium": True})
-
+    m.fs.bt_properties = BTXParameterBlock(default={
+                                           "valid_phase":
+                                           ('Liq', 'Vap'),
+                                           "activity_coeff_model":
+                                           "Ideal"})
 else:
     m.fs.thermo_params = HDAParameterBlock()
     m.fs.bt_properties = BTXParameterBlock(default={
@@ -72,41 +77,41 @@ else:
                                            "activity_coeff_model":
                                            "Ideal"})
 
-    m.fs.translator = Translator(default={
-                                 "inlet_property_package": m.fs.thermo_params,
-                                 "outlet_property_package":
-                                     m.fs.bt_properties})
+m.fs.translator = Translator(default={
+                             "inlet_property_package": m.fs.thermo_params,
+                             "outlet_property_package":
+                                 m.fs.bt_properties})
 
-    m.fs.pre_heater = Heater(default={"property_package": m.fs.bt_properties,
-                                      "has_pressure_change": True,
-                                      "has_phase_equilibrium": True})
+m.fs.pre_heater = Heater(default={"property_package": m.fs.bt_properties,
+                                  "has_pressure_change": True,
+                                  "has_phase_equilibrium": True})
 
-    # Translator constraints linking outlet state variables to inlet
-    # state variables
-    m.fs.translator.eq_total_flow = Constraint(
-        expr=m.fs.translator.outlet.flow_mol[0] ==
-        m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "benzene"] +
-        m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "toluene"])
+# Translator constraints linking outlet state variables to inlet
+# state variables
+m.fs.translator.eq_total_flow = Constraint(
+    expr=m.fs.translator.outlet.flow_mol[0] ==
+    m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "benzene"] +
+    m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "toluene"])
 
-    m.fs.translator.eq_temperature = Constraint(
-        expr=m.fs.translator.outlet.temperature[0] ==
-        m.fs.translator.inlet.temperature[0])
+m.fs.translator.eq_temperature = Constraint(
+    expr=m.fs.translator.outlet.temperature[0] ==
+    m.fs.translator.inlet.temperature[0])
 
-    m.fs.translator.eq_pressure = Constraint(
-        expr=m.fs.translator.outlet.pressure[0] ==
-        m.fs.translator.inlet.pressure[0])
+m.fs.translator.eq_pressure = Constraint(
+    expr=m.fs.translator.outlet.pressure[0] ==
+    m.fs.translator.inlet.pressure[0])
 
-    m.fs.translator.eq_mole_frac_benzene = Constraint(
-        expr=m.fs.translator.outlet.mole_frac_comp[0, "benzene"] ==
-        m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "benzene"] /
-        (m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "benzene"] +
-         m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "toluene"]))
+m.fs.translator.eq_mole_frac_benzene = Constraint(
+    expr=m.fs.translator.outlet.mole_frac_comp[0, "benzene"] ==
+    m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "benzene"] /
+    (m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "benzene"] +
+     m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "toluene"]))
 
-    m.fs.translator.eq_mole_frac_toluene = Constraint(
-        expr=m.fs.translator.outlet.mole_frac_comp[0, "toluene"] ==
-        m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "toluene"] /
-        (m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "benzene"] +
-         m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "toluene"]))
+m.fs.translator.eq_mole_frac_toluene = Constraint(
+    expr=m.fs.translator.outlet.mole_frac_comp[0, "toluene"] ==
+    m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "toluene"] /
+    (m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "benzene"] +
+     m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "toluene"]))
 
 m.fs.reaction_params = reaction_props.HDAReactionParameterBlock(
         default={"property_package": m.fs.thermo_params})
@@ -119,20 +124,28 @@ m.fs.H101 = Heater(default={"property_package": m.fs.thermo_params,
                             "has_pressure_change": False,
                             "has_phase_equilibrium": True})
 
-m.fs.R101 = StoichiometricReactor(
-            default={"property_package": m.fs.thermo_params,
-                     "reaction_package": m.fs.reaction_params,
-                     "has_heat_of_reaction": True,
-                     "has_heat_transfer": True,
-                     "has_pressure_change": False})
+if args.prop == "genericprop":
+    m.fs.R101 = StoichiometricReactor(
+                default={"property_package": m.fs.thermo_params,
+                         "reaction_package": m.fs.reaction_params,
+                         "has_heat_of_reaction": False,
+                         "has_heat_transfer": True,
+                         "has_pressure_change": False})
+else:
+    m.fs.R101 = StoichiometricReactor(
+                default={"property_package": m.fs.thermo_params,
+                         "reaction_package": m.fs.reaction_params,
+                         "has_heat_of_reaction": True,
+                         "has_heat_transfer": True,
+                         "has_pressure_change": False})
 
 m.fs.F101 = Flash(default={"property_package": m.fs.thermo_params,
-                               "has_heat_transfer": True,
-                               "has_pressure_change": True})
+                           "has_heat_transfer": True,
+                           "has_pressure_change": True})
 
 m.fs.S101 = Splitter(default={"property_package": m.fs.thermo_params,
-                               "ideal_separation": False,
-                               "outlet_list": ["purge", "recycle"]})
+                              "ideal_separation": False,
+                              "outlet_list": ["purge", "recycle"]})
 
 m.fs.C101 = PressureChanger(default={
             "property_package": m.fs.thermo_params,
@@ -151,16 +164,16 @@ m.fs.s08 = Arc(source=m.fs.S101.recycle, destination=m.fs.C101.inlet)
 m.fs.s09 = Arc(source=m.fs.C101.outlet,
                destination=m.fs.M101.vapor_recycle)
 
-if args.prop == "genericprop":
-    m.fs.s10 = Arc(source=m.fs.F101.liq_outlet,
-                   destination=m.fs.pre_heater.inlet)
-else:
-    m.fs.s10 = Arc(source=m.fs.F101.liq_outlet,
-                   destination=m.fs.translator.inlet)
-    m.fs.s11 = Arc(source=m.fs.translator.outlet,
-                   destination=m.fs.pre_heater.inlet)
-    # m.fs.s12 = Arc(source=m.fs.pre_heater.outlet,
-    #                destination=m.fs.distillation.input)
+# if args.prop == "genericprop":
+#     m.fs.s10 = Arc(source=m.fs.F101.liq_outlet,
+#                    destination=m.fs.pre_heater.inlet)
+# else:
+m.fs.s10 = Arc(source=m.fs.F101.liq_outlet,
+               destination=m.fs.translator.inlet)
+m.fs.s11 = Arc(source=m.fs.translator.outlet,
+               destination=m.fs.pre_heater.inlet)
+# m.fs.s12 = Arc(source=m.fs.pre_heater.outlet,
+#                destination=m.fs.distillation.input)
 
 TransformationFactory("network.expand_arcs").apply_to(m)
 
@@ -230,12 +243,12 @@ m.fs.S101.split_fraction[0, "purge"].fix(0.2)
 m.fs.C101.outlet.pressure.fix(350000)
 
 # Set heater outlet conditions (set outlet 2 phase)
-if args.prop == "genericprop":
-    m.fs.pre_heater.outlet.temperature.fix(370)
-    m.fs.pre_heater.deltaP.fix(-200000)
-else:
-    m.fs.pre_heater.outlet.temperature.fix(375)
-    m.fs.pre_heater.deltaP.fix(-200000)
+# if args.prop == "genericprop":
+#     m.fs.pre_heater.outlet.temperature.fix(370)
+#     m.fs.pre_heater.deltaP.fix(-200000)
+# else:
+m.fs.pre_heater.outlet.temperature.fix(375)
+m.fs.pre_heater.deltaP.fix(-200000)
 
 # # distillation level inputs
 # m.fs.distillation.condenser.reflux_ratio.fix(1.4)
@@ -303,31 +316,33 @@ seq.run(m, function)
 solver = get_default_solver()
 solver.solve(m, tee=True)
 
+m.fs.H101.report()
+m.fs.R101.report()
 m.fs.F101.report()
 m.fs.pre_heater.report()
 
-if args.prop == "genericprop":
-    m.fs.distillation = TrayColumn(default={
-                                   "number_of_trays": 10,
-                                   "feed_tray_location": 5,
-                                   "condenser_type":
-                                       CondenserType.totalCondenser,
-                                   "condenser_temperature_spec":
-                                       TemperatureSpec.atBubblePoint,
-                                       "property_package": m.fs.thermo_params,
-                                       "has_heat_transfer": False,
-                                       "has_pressure_change": False})
-else:
-    m.fs.distillation = TrayColumn(default={
-                                   "number_of_trays": 10,
-                                   "feed_tray_location": 5,
-                                   "condenser_type":
-                                       CondenserType.totalCondenser,
-                                   "condenser_temperature_spec":
-                                       TemperatureSpec.atBubblePoint,
-                                       "property_package": m.fs.bt_properties,
-                                       "has_heat_transfer": False,
-                                       "has_pressure_change": False})
+# if args.prop == "genericprop":
+#     m.fs.distillation = TrayColumn(default={
+#                                    "number_of_trays": 10,
+#                                    "feed_tray_location": 5,
+#                                    "condenser_type":
+#                                        CondenserType.totalCondenser,
+#                                    "condenser_temperature_spec":
+#                                        TemperatureSpec.atBubblePoint,
+#                                        "property_package": m.fs.thermo_params,
+#                                        "has_heat_transfer": False,
+#                                        "has_pressure_change": False})
+# else:
+m.fs.distillation = TrayColumn(default={
+                               "number_of_trays": 10,
+                               "feed_tray_location": 5,
+                               "condenser_type":
+                                   CondenserType.totalCondenser,
+                               "condenser_temperature_spec":
+                                   TemperatureSpec.atBubblePoint,
+                                   "property_package": m.fs.bt_properties,
+                                   "has_heat_transfer": False,
+                                   "has_pressure_change": False})
 
 m.fs.s12 = Arc(source=m.fs.pre_heater.outlet,
                destination=m.fs.distillation.feed)
@@ -350,10 +365,32 @@ m.fs.distillation.initialize()
 solver.solve(m, tee=True)
 
 # simulation results
+m.fs.H101.report()
+m.fs.R101.report()
 m.fs.F101.report()
 m.fs.pre_heater.report()
 m.fs.distillation.condenser.report()
 m.fs.distillation.reboiler.report()
+
+assert value(m.fs.H101.outlet.temperature[0]) == \
+    pytest.approx(600, rel=1e-3)
+if args.prop == "oldprop":
+    assert value(m.fs.R101.outlet.temperature[0]) == \
+        pytest.approx(771.84, rel=1e-3)
+else:
+    assert value(m.fs.R101.outlet.temperature[0]) == \
+        pytest.approx(760.58, rel=1e-3)
+assert value(m.fs.F101.vap_outlet.temperature[0]) == \
+    pytest.approx(325, rel=1e-3)
+assert value(m.fs.pre_heater.outlet.temperature[0]) == \
+    pytest.approx(375, rel=1e-3)
+assert value(m.fs.distillation.condenser.condenser_pressure[0]) == \
+    pytest.approx(150000, rel=1e-2)
+assert value(m.fs.distillation.condenser.reflux_ratio) == \
+    pytest.approx(0.5, rel=1e-3)
+assert value(m.fs.distillation.reboiler.boilup_ratio) == \
+    pytest.approx(0.5, rel=1e-3)
+
 
 # Add operating cost
 m.fs.cooling_cost = Expression(expr=0.212e-7 * (-m.fs.F101.heat_duty[0]) +
@@ -412,7 +449,10 @@ if args.optimize:
         expr=m.fs.distillation.condenser.
         distillate.mole_frac_comp[0, "benzene"] >= 0.95)
 
-    solver.solve(m, tee=True)
+    res = solver.solve(m, tee=True)
+
+    if not res.solver.termination_condition == TerminationCondition.optimal:
+        log_infeasible_constraints(m)
 
     print("Optimal operating variables:")
     print("optimal H101 temperature is ",
@@ -431,5 +471,22 @@ if args.optimize:
           value(m.fs.distillation.reboiler.boilup_ratio))
 
     print("Column Report")
+    m.fs.R101.report()
     m.fs.distillation.condenser.report()
     m.fs.distillation.reboiler.report()
+
+    # Check expected optimal values
+    assert value(m.fs.H101.outlet.temperature[0]) == \
+        pytest.approx(500, rel=1e-3)
+    assert value(m.fs.R101.outlet.temperature[0]) == \
+        pytest.approx(696.11, rel=1e-3)
+    assert value(m.fs.F101.vap_outlet.temperature[0]) == \
+        pytest.approx(301.87, rel=1e-3)
+    assert value(m.fs.pre_heater.outlet.temperature[0]) == \
+        pytest.approx(373.63, rel=1e-3)
+    assert value(m.fs.distillation.condenser.condenser_pressure[0]) == \
+        pytest.approx(101325, rel=1e-2)
+    assert value(m.fs.distillation.condenser.reflux_ratio) == \
+        pytest.approx(0.777, rel=1e-3)
+    assert value(m.fs.distillation.reboiler.boilup_ratio) == \
+        pytest.approx(0.984, rel=1e-3)

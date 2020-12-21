@@ -12,9 +12,11 @@ from pyomo.environ import (ConcreteModel,
                            Objective,
                            SolverFactory,
                            TransformationFactory,
-                           Var)
+                           Var,
+                           TerminationCondition)
 from pyomo.network import Arc, SequentialDecomposition
-
+from pyomo.util.infeasible import log_infeasible_bounds, \
+    log_infeasible_constraints
 from idaes.core import FlowsheetBlock
 from idaes.generic_models.unit_models import (Feed,
                                               PressureChanger,
@@ -226,45 +228,56 @@ def function(unit):
 seq.run(m, function)
 
 solver = SolverFactory('ipopt')
-solver.solve(m, tee=True)
+res = solver.solve(m, tee=True)
 
-# # -----------------------------------------------------------------------------
-# # Distillation
-# m.fs.C101 = TrayColumn(default={
-#     "number_of_trays": 10,
-#     "feed_tray_location": 5,
-#     "condenser_type": CondenserType.totalCondenser,
-#     "condenser_temperature_spec": TemperatureSpec.atBubblePoint,
-#     "property_package": m.fs.bt_params,
-#     "has_heat_transfer": False,
-#     "has_pressure_change": False})
+# -----------------------------------------------------------------------------
+# Distillation
+m.fs.C101 = TrayColumn(default={
+    "number_of_trays": 10,
+    "feed_tray_location": 5,
+    "condenser_type": CondenserType.totalCondenser,
+    "condenser_temperature_spec": TemperatureSpec.atBubblePoint,
+    "property_package": m.fs.bt_params,
+    "has_heat_transfer": False,
+    "has_pressure_change": False})
 
-# m.fs.s11 = Arc(source=m.fs.H102.outlet,
-#                 destination=m.fs.C101.tray[5].feed)
+m.fs.s11 = Arc(
+    source=m.fs.H102.outlet, destination=m.fs.C101.feed)
 
-# # distillation level inputs
-# m.fs.C101.condenser.reflux_ratio.fix(0.5)
-# m.fs.C101.condenser.condenser_pressure.fix(150000)
-# m.fs.C101.reboiler.boilup_ratio.fix(0.5)
+# distillation level inputs
+m.fs.C101.condenser.reflux_ratio.fix(0.5)
+m.fs.C101.condenser.condenser_pressure.fix(150000)
+m.fs.C101.reboiler.boilup_ratio.fix(0.5)
 
-# TransformationFactory("network.expand_arcs").apply_to(m)
+TransformationFactory("network.expand_arcs").apply_to(m)
 
-# propagate_state(m.fs.s11)
-# m.fs.C101.initialize()
+propagate_state(m.fs.s11)
+m.fs.C101.initialize()
 
-# solver.solve(m, tee=True)
+res = solver.solve(m, tee=True)
+
+assert res.solver.termination_condition == TerminationCondition.optimal
+
+m.fs.H101.report()
+m.fs.R101.report()
+m.fs.F101.report()
+m.fs.H102.report()
+m.fs.C101.condenser.report()
+m.fs.C101.reboiler.report()
 
 # -----------------------------------------------------------------------------
 # optimize
 # Add operating cost
 m.fs.cooling_cost = Expression(
     expr=0.212e-7 * (-m.fs.F101.heat_duty[0]) +
-    0.212e-7 * (-m.fs.R101.heat_duty[0]))# +
-    #0.212e-7 * (-m.fs.distillation.condenser.heat_duty[0]))
+    0.212e-7 * (-m.fs.R101.heat_duty[0]) +
+    0.212e-7 * (-m.fs.C101.condenser.heat_duty[0]))
+
 m.fs.heating_cost = Expression(
     expr=2.2e-7 * m.fs.H101.heat_duty[0] +
-    1.2e-7 * m.fs.H102.heat_duty[0])# +
-    #1.9e-7 * m.fs.distillation. reboiler.heat_duty[0])
+    1.2e-7 * m.fs.H102.heat_duty[0] +
+    1.9e-7 * m.fs.C101. reboiler.heat_duty[0])
+
 m.fs.operating_cost = Expression(
     expr=(3600 * 24 * 365 * (m.fs.heating_cost + m.fs.cooling_cost)))
 
@@ -276,20 +289,18 @@ m.fs.total_cost = Expression(
 
 m.fs.objective = Objective(expr=m.fs.total_cost)
 
-
 # Change reactor configuration
 m.fs.R101.conversion.unfix()
 # m.fs.R101.volume.fix()
-
 
 # Unfix degrees of freedom
 m.fs.H101.outlet.temperature.unfix()
 m.fs.R101.heat_duty.unfix()
 m.fs.F101.vap_outlet.temperature.unfix()
 m.fs.H102.outlet.temperature.unfix()
-# m.fs.distillation.condenser.condenser_pressure.unfix()
-# m.fs.distillation.condenser.reflux_ratio.unfix()
-# m.fs.distillation.reboiler.boilup_ratio.unfix()
+m.fs.C101.condenser.condenser_pressure.unfix()
+m.fs.C101.condenser.reflux_ratio.unfix()
+m.fs.C101.reboiler.boilup_ratio.unfix()
 
 # Set bounds
 m.fs.H101.outlet.temperature[0].setlb(500)
@@ -297,7 +308,7 @@ m.fs.H101.outlet.temperature[0].setub(600)
 
 m.fs.R101.outlet.temperature[0].setlb(600)
 m.fs.R101.outlet.temperature[0].setub(800)
-m.fs.R101.heat_duty.setlb(-10000)
+# m.fs.R101.heat_duty.setlb(-10000)
 m.fs.R101.heat_duty.setub(0)
 m.fs.R101.volume.setlb(0.05)
 m.fs.R101.volume.setub(0.5)
@@ -308,37 +319,42 @@ m.fs.F101.vap_outlet.temperature[0].setub(450.0)
 m.fs.H102.outlet.temperature[0].setlb(350)
 m.fs.H102.outlet.temperature[0].setub(400)
 
-# m.fs.distillation.condenser.condenser_pressure.setlb(101325)
-# m.fs.distillation.condenser.condenser_pressure.setub(150000)
+m.fs.C101.condenser.condenser_pressure.setlb(101325)
+m.fs.C101.condenser.condenser_pressure.setub(150000)
 
-# m.fs.distillation.condenser.reflux_ratio.setlb(0.1)
-# m.fs.distillation.condenser.reflux_ratio.setub(1.5)
+m.fs.C101.condenser.reflux_ratio.setlb(0.1)
+m.fs.C101.condenser.reflux_ratio.setub(1.5)
 
-# m.fs.distillation.reboiler.boilup_ratio.setlb(0.1)
-# m.fs.distillation.reboiler.boilup_ratio.setub(1.5)
+m.fs.C101.reboiler.boilup_ratio.setlb(0.1)
+m.fs.C101.reboiler.boilup_ratio.setub(1.5)
 
-# m.fs.overhead_loss = Constraint(
-#     expr=m.fs.F101.vap_outlet.flow_mol_phase_comp[0, "Vap", "benzene"] <=
-#     0.20 * m.fs.R101.outlet.flow_mol_phase_comp[0, "Vap", "benzene"])
-# m.fs.product_flow = Constraint(
-#     expr=m.fs.distillation.condenser.distillate.flow_mol[0] >=
-#     0.15)
-# m.fs.product_purity = Constraint(
-#     expr=m.fs.distillation.condenser.
-#     distillate.mole_frac_comp[0, "benzene"] >= 0.95)
+m.fs.overhead_loss = Constraint(
+    expr=m.fs.F101.vap_outlet.flow_mol_phase_comp[0, "Vap", "benzene"] <=
+    0.20 * m.fs.R101.outlet.flow_mol_phase_comp[0, "Vap", "benzene"])
 m.fs.product_flow = Constraint(
-    expr=m.fs.H102.outlet.flow_mol[0] >= 0.25)
+    expr=m.fs.C101.condenser.distillate.flow_mol[0] >=
+    0.15)
 m.fs.product_purity = Constraint(
-    expr=m.fs.H102.outlet.mole_frac_comp[0, "benzene"] >= 0.75)
+    expr=m.fs.C101.condenser.
+    distillate.mole_frac_comp[0, "benzene"] >= 0.95)
 
-solver.solve(m, tee=True)
+# m.fs.product_flow = Constraint(
+#     expr=m.fs.H102.outlet.flow_mol[0] >= 0.25)
+# m.fs.product_purity = Constraint(
+#     expr=m.fs.H102.outlet.mole_frac_comp[0, "benzene"] >= 0.75)
 
+res = solver.solve(m, tee=True)
+
+if not res.solver.termination_condition == TerminationCondition.optimal:
+    log_infeasible_constraints(m)
+
+raise Exception(res)
 # -----------------------------------------------------------------------------
 m.fs.F101.report()
 m.fs.R101.report()
-# m.fs.R101.display()
 m.fs.H102.report()
-# m.fs.H102.control_volume.properties_out.display()
+m.fs.C101.condenser.report()
+m.fs.C101.reboiler.report()
 
 m.fs.operating_cost.display()
 m.fs.capital_cost.display()
