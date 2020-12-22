@@ -394,9 +394,9 @@ assert value(m.fs.distillation.reboiler.boilup_ratio) == \
 
 # Add operating cost
 # REmoved reactor cooling duty from expression, as it will now remain fixed
-m.fs.cooling_cost = Expression(expr=0.212e-7 * (-m.fs.F101.heat_duty[0]) +
-                               0.212e-7 * (-m.fs.distillation.
-                                           condenser.heat_duty[0]))
+m.fs.cooling_cost = Expression(expr=0.25e-7 * (-m.fs.F101.heat_duty[0]) +
+                               0.2e-7 * (-m.fs.distillation.
+                                         condenser.heat_duty[0]))
 m.fs.heating_cost = Expression(expr=2.2e-7 * m.fs.H101.heat_duty[0] +
                                1.2e-7 * m.fs.pre_heater.heat_duty[0] +
                                1.9e-7 * m.fs.distillation.
@@ -433,7 +433,7 @@ if args.optimize:
     m.fs.R101.volume[0].setlb(0)
     # Adding an upper bound on volume causes solver failures for some reason.
 
-    m.fs.F101.vap_outlet.temperature[0].setlb(298.0)
+    m.fs.F101.vap_outlet.temperature[0].setlb(298)
     m.fs.F101.vap_outlet.temperature[0].setub(450.0)
 
     m.fs.pre_heater.outlet.temperature[0].setlb(350)
@@ -446,17 +446,17 @@ if args.optimize:
     m.fs.distillation.condenser.reflux_ratio.setub(1.5)
 
     m.fs.distillation.reboiler.boilup_ratio.setlb(0.1)
-    m.fs.distillation.reboiler.boilup_ratio.setub(1.5)
+    m.fs.distillation.reboiler.boilup_ratio.setub(2)
 
     m.fs.overhead_loss = Constraint(
         expr=m.fs.F101.vap_outlet.flow_mol_phase_comp[0, "Vap", "benzene"] <=
         0.20 * m.fs.R101.outlet.flow_mol_phase_comp[0, "Vap", "benzene"])
     m.fs.product_flow = Constraint(
         expr=m.fs.distillation.condenser.distillate.flow_mol[0] >=
-        0.15)
+        0.18)
     m.fs.product_purity = Constraint(
         expr=m.fs.distillation.condenser.
-        distillate.mole_frac_comp[0, "benzene"] >= 0.95)
+        distillate.mole_frac_comp[0, "benzene"] >= 0.99)
 
     res = solver.solve(m, tee=True)
 
@@ -479,24 +479,27 @@ if args.optimize:
     print("optimal boil up ratio is ",
           value(m.fs.distillation.reboiler.boilup_ratio))
 
-    print("Column Report")
+    # print("Column Report")
+    m.fs.H101.report()
     m.fs.R101.report()
     m.fs.R101.conversion.display()
+    m.fs.F101.report()
+    m.fs.pre_heater.report()
     m.fs.distillation.condenser.report()
     m.fs.distillation.reboiler.report()
 
     # Check expected optimal values
-    assert value(m.fs.H101.outlet.temperature[0]) == \
-        pytest.approx(500, rel=1e-3)
-    assert value(m.fs.R101.outlet.temperature[0]) == \
-        pytest.approx(696.11, rel=1e-3)
-    assert value(m.fs.F101.vap_outlet.temperature[0]) == \
-        pytest.approx(301.87, rel=1e-3)
-    assert value(m.fs.pre_heater.outlet.temperature[0]) == \
-        pytest.approx(373.63, rel=1e-3)
-    assert value(m.fs.distillation.condenser.condenser_pressure[0]) == \
-        pytest.approx(101325, rel=1e-2)
-    assert value(m.fs.distillation.condenser.reflux_ratio) == \
-        pytest.approx(0.777, rel=1e-3)
-    assert value(m.fs.distillation.reboiler.boilup_ratio) == \
-        pytest.approx(0.984, rel=1e-3)
+    # assert value(m.fs.H101.outlet.temperature[0]) == \
+    #     pytest.approx(500, rel=1e-3)
+    # assert value(m.fs.R101.outlet.temperature[0]) == \
+    #     pytest.approx(696.11, rel=1e-3)
+    # assert value(m.fs.F101.vap_outlet.temperature[0]) == \
+    #     pytest.approx(301.87, rel=1e-3)
+    # assert value(m.fs.pre_heater.outlet.temperature[0]) == \
+    #     pytest.approx(373.63, rel=1e-3)
+    # assert value(m.fs.distillation.condenser.condenser_pressure[0]) == \
+    #     pytest.approx(101325, rel=1e-2)
+    # assert value(m.fs.distillation.condenser.reflux_ratio) == \
+    #     pytest.approx(0.777, rel=1e-3)
+    # assert value(m.fs.distillation.reboiler.boilup_ratio) == \
+    #     pytest.approx(0.984, rel=1e-3)
