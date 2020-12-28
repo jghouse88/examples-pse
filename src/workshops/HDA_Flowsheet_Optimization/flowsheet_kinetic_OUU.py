@@ -60,6 +60,8 @@ def get_init_model(outlvl=idaeslog.WARNING):
                                            "activity_coeff_model":
                                            "Ideal"})
 
+    m.fs.reaction_params = reaction_props.HDAReactionParameterBlock(
+        default={"property_package": m.fs.thermo_params})
     m.fs.translator = Translator(default={
                                  "inlet_property_package": m.fs.thermo_params,
                                  "outlet_property_package":
@@ -96,8 +98,6 @@ def get_init_model(outlvl=idaeslog.WARNING):
         (m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "benzene"] +
          m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "toluene"]))
 
-    m.fs.reaction_params = reaction_props.HDAReactionParameterBlock(
-            default={"property_package": m.fs.thermo_params})
 
     m.fs.M101 = Mixer(default={
         "property_package": m.fs.thermo_params,
@@ -284,6 +284,8 @@ def get_init_model(outlvl=idaeslog.WARNING):
 
 
 def get_opt_model(m):
+    # m - an initialized model
+
     # Add operating cost
     # Removed reactor cooling duty from expression, as it will now remain fixed
     m.fs.cooling_cost = Expression(expr=0.25e-7 * (-m.fs.F101.heat_duty[0]) +
@@ -298,7 +300,7 @@ def get_opt_model(m):
                                             m.fs.cooling_cost)))
 
     # Add expresion for capital cost
-    # Multiplier picked to give a result that doesn't sit on a bound
+    # Random cost coefficient
     m.fs.capital_cost = Expression(expr=1e5*m.fs.R101.volume[0])
 
     # Added capital cost to objective
