@@ -68,8 +68,8 @@ def get_init_model(outlvl=idaeslog.WARNING):
                                      m.fs.bt_properties})
 
     m.fs.H102 = Heater(default={"property_package": m.fs.bt_properties,
-                                      "has_pressure_change": True,
-                                      "has_phase_equilibrium": True})
+                                "has_pressure_change": True,
+                                "has_phase_equilibrium": True})
 
     # Translator constraints linking outlet state variables to inlet
     # state variables
@@ -374,6 +374,12 @@ def report_optimal(m):
     print("Activation energy = ",
           value(m.fs.reaction_params.energy_activation))
     print()
+    print("Objective function")
+    print("Capital cost ",
+          value(m.fs.capital_cost))
+    print("Operating cost ",
+          value(m.fs.operating_cost))
+    print()
     print("Optimal design variables")
     print("optimal reactor volume is ",
           value(m.fs.R101.volume[0]))
@@ -468,18 +474,18 @@ if __name__ == "__main__":
 
     report_optimal(m_deterministic)
 
-    print()
-    print("Running stochastic case")
-    n_scenarios = 100
-    m_stochastic = get_ouu_extensive_form(n_scenarios=n_scenarios)
-    res = solver.solve(m_stochastic, tee=True)
-
-    print()
-    print("The expected objective value is $",
-          value(m_stochastic.obj))
-    for i in range(n_scenarios):
-        print()
-        print("Scenario_" + str(i))
-        report_optimal(getattr(m_stochastic, 'scenario_{}'.format(i)))
-    run_data = store_optimal_operating(m_stochastic, n_scenarios=n_scenarios)
-    run_data.to_pickle("run_data_100.pkl")
+    # print()
+    # print("Running stochastic case")
+    # n_scenarios = 100
+    # m_stochastic = get_ouu_extensive_form(n_scenarios=n_scenarios)
+    # res = solver.solve(m_stochastic, tee=True)
+    #
+    # print()
+    # print("The expected objective value is $",
+    #       value(m_stochastic.obj))
+    # for i in range(n_scenarios):
+    #     print()
+    #     print("Scenario_" + str(i))
+    #     report_optimal(getattr(m_stochastic, 'scenario_{}'.format(i)))
+    # run_data = store_optimal_operating(m_stochastic, n_scenarios=n_scenarios)
+    # run_data.to_pickle("run_data_100.pkl")
