@@ -285,7 +285,78 @@ def get_opt_model(m):
     m.fs.capital_cost = Expression(expr=1e5*m.fs.R101.volume[0])
 
     # Added capital cost to objective
-    m.fs.objective = Objective(expr=m.fs.operating_cost+m.fs.capital_cost)
+    m.fs.objective = Objective(expr=m.fs.operating_cost + m.fs.capital_cost)
+
+    # Unfix degrees of freedom
+    m.fs.H101.outlet.temperature.unfix()
+    # Do not unfix reactor heat duty - trying to optimize this causes issues
+    m.fs.R101.conversion.unfix()  # Unfix conversion constraint
+    m.fs.F101.vap_outlet.temperature.unfix()
+    m.fs.H102.outlet.temperature.unfix()
+    m.fs.distillation.condenser.condenser_pressure.unfix()
+    m.fs.distillation.condenser.reflux_ratio.unfix()
+    m.fs.distillation.reboiler.boilup_ratio.unfix()
+
+    # Set bounds
+    m.fs.H101.outlet.temperature[0].setlb(500)
+    m.fs.H101.outlet.temperature[0].setub(600)
+
+    m.fs.R101.outlet.temperature[0].setlb(600)
+    m.fs.R101.outlet.temperature[0].setub(900)
+    # New bounds
+    m.fs.R101.volume[0].setlb(0)
+    # Adding an upper bound on volume causes solver failures for some reason.
+
+    m.fs.F101.vap_outlet.temperature[0].setlb(298)
+    m.fs.F101.vap_outlet.temperature[0].setub(450.0)
+
+    m.fs.H102.outlet.temperature[0].setlb(350)
+    m.fs.H102.outlet.temperature[0].setub(400)
+
+    m.fs.distillation.condenser.condenser_pressure.setlb(101325)
+    m.fs.distillation.condenser.condenser_pressure.setub(150000)
+
+    m.fs.distillation.condenser.reflux_ratio.setlb(0.1)
+    m.fs.distillation.condenser.reflux_ratio.setub(5)
+
+    m.fs.distillation.reboiler.boilup_ratio.setlb(0.1)
+    m.fs.distillation.reboiler.boilup_ratio.setub(5)
+
+    m.fs.overhead_loss = Constraint(
+        expr=m.fs.F101.vap_outlet.flow_mol_phase_comp[0, "Vap", "benzene"] <=
+        0.20 * m.fs.R101.outlet.flow_mol_phase_comp[0, "Vap", "benzene"])
+    m.fs.product_flow = Constraint(
+        expr=m.fs.distillation.condenser.distillate.flow_mol[0] >=
+        0.18)
+    m.fs.product_purity = Constraint(
+        expr=m.fs.distillation.condenser.
+        distillate.mole_frac_comp[0, "benzene"] >= 0.99)
+
+    return m
+
+
+def get_opt_model_det(m):
+    # m - an initialized model
+
+    # Add operating cost
+    # Removed reactor cooling duty from expression, as it will now remain fixed
+    m.fs.cooling_cost = Expression(expr=0.25e-7 * (-m.fs.F101.heat_duty[0]) +
+                                   0.2e-7 * (-m.fs.distillation.
+                                             condenser.heat_duty[0]))
+    m.fs.heating_cost = Expression(expr=2.2e-7 * m.fs.H101.heat_duty[0] +
+                                   1.2e-7 * m.fs.H102.heat_duty[0] +
+                                   1.9e-7 * m.fs.distillation.
+                                   reboiler.heat_duty[0])
+    m.fs.operating_cost = Expression(expr=(3600 * 24 * 365 *
+                                           (m.fs.heating_cost +
+                                            m.fs.cooling_cost)))
+
+    # Add expresion for capital cost
+    # Random cost coefficient
+    m.fs.capital_cost = Expression(expr=1e5*m.fs.R101.volume[0])
+
+    # Added capital cost to objective
+    m.fs.objective = Objective(expr=m.fs.capital_cost + m.fs.operating_cost)
 
     # Unfix degrees of freedom
     m.fs.H101.outlet.temperature.unfix()
@@ -474,7 +545,7 @@ if __name__ == "__main__":
 
     report_optimal(m_deterministic)
 
-    # print()
+    # # print()
     # print("Running stochastic case")
     # n_scenarios = 100
     # m_stochastic = get_ouu_extensive_form(n_scenarios=n_scenarios)

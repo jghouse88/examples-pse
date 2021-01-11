@@ -7,7 +7,10 @@ Created on Fri Oct  2 13:44:20 2020
 """
 
 import argparse
+import numpy.random as rnd
 import pytest
+import pandas as pd
+
 from pyomo.environ import (Constraint,
                            Var,
                            ConcreteModel,
@@ -39,13 +42,10 @@ from idaes.core.util.testing import get_default_solver
 # Import idaes logger to set output levels
 import idaes.logger as idaeslog
 
-# from idaes.generic_models.properties.core.generic.generic_property \
-#     import GenericParameterBlock
 from idaes.generic_models.properties.activity_coeff_models.\
     BTX_activity_coeff_VLE import BTXParameterBlock
-# from BTHM_ideal import configuration
 # import hda_reaction as reaction_props
-import hda_reaction_kinetic_2 as reaction_props
+import hda_reaction_kinetic as reaction_props
 from hda_ideal_VLE import HDAParameterBlock
 
 
@@ -67,9 +67,9 @@ def get_init_model(outlvl=idaeslog.WARNING):
                                  "outlet_property_package":
                                      m.fs.bt_properties})
 
-    m.fs.pre_heater = Heater(default={"property_package": m.fs.bt_properties,
-                                      "has_pressure_change": True,
-                                      "has_phase_equilibrium": True})
+    m.fs.H102 = Heater(default={"property_package": m.fs.bt_properties,
+                                "has_pressure_change": True,
+                                "has_phase_equilibrium": True})
 
     # Translator constraints linking outlet state variables to inlet
     # state variables
@@ -97,7 +97,6 @@ def get_init_model(outlvl=idaeslog.WARNING):
         m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "toluene"] /
         (m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "benzene"] +
          m.fs.translator.inlet.flow_mol_phase_comp[0, "Liq", "toluene"]))
-
 
     m.fs.M101 = Mixer(default={
         "property_package": m.fs.thermo_params,
@@ -139,7 +138,7 @@ def get_init_model(outlvl=idaeslog.WARNING):
     m.fs.s10 = Arc(source=m.fs.F101.liq_outlet,
                    destination=m.fs.translator.inlet)
     m.fs.s11 = Arc(source=m.fs.translator.outlet,
-                   destination=m.fs.pre_heater.inlet)
+                   destination=m.fs.H102.inlet)
 
     TransformationFactory("network.expand_arcs").apply_to(m)
 
@@ -176,6 +175,7 @@ def get_init_model(outlvl=idaeslog.WARNING):
          m.fs.R101.outlet.flow_mol_phase_comp[0, "Vap", "toluene"]))
 
     m.fs.R101.conversion.fix(0.75)
+    # m.fs.R101.volume.fix(0.3)
     m.fs.R101.heat_duty.fix(0)
 
     m.fs.F101.vap_outlet.temperature.fix(325.0)
@@ -184,8 +184,8 @@ def get_init_model(outlvl=idaeslog.WARNING):
     m.fs.S101.split_fraction[0, "purge"].fix(0.2)
     m.fs.C101.outlet.pressure.fix(350000)
 
-    m.fs.pre_heater.outlet.temperature.fix(375)
-    m.fs.pre_heater.deltaP.fix(-200000)
+    m.fs.H102.outlet.temperature.fix(375)
+    m.fs.H102.deltaP.fix(-200000)
 
     assert degrees_of_freedom(m) == 0
 
@@ -244,7 +244,7 @@ def get_init_model(outlvl=idaeslog.WARNING):
                                        "has_heat_transfer": False,
                                        "has_pressure_change": False})
 
-    m.fs.s12 = Arc(source=m.fs.pre_heater.outlet,
+    m.fs.s12 = Arc(source=m.fs.H102.outlet,
                    destination=m.fs.distillation.feed)
 
     # distillation level inputs
@@ -263,24 +263,6 @@ def get_init_model(outlvl=idaeslog.WARNING):
     solver.solve(m, tee=False)
 
     return m
-    # assert value(m.fs.H101.outlet.temperature[0]) == \
-    #     pytest.approx(600, rel=1e-3)
-    # if args.prop == "oldprop":
-    #     assert value(m.fs.R101.outlet.temperature[0]) == \
-    #         pytest.approx(771.84, rel=1e-3)
-    # else:
-    #     assert value(m.fs.R101.outlet.temperature[0]) == \
-    #         pytest.approx(760.58, rel=1e-3)
-    # assert value(m.fs.F101.vap_outlet.temperature[0]) == \
-    #     pytest.approx(325, rel=1e-3)
-    # assert value(m.fs.pre_heater.outlet.temperature[0]) == \
-    #     pytest.approx(375, rel=1e-3)
-    # assert value(m.fs.distillation.condenser.condenser_pressure[0]) == \
-    #     pytest.approx(150000, rel=1e-2)
-    # assert value(m.fs.distillation.condenser.reflux_ratio) == \
-    #     pytest.approx(0.5, rel=1e-3)
-    # assert value(m.fs.distillation.reboiler.boilup_ratio) == \
-    #     pytest.approx(0.5, rel=1e-3)
 
 
 def get_opt_model(m):
@@ -291,10 +273,9 @@ def get_opt_model(m):
     m.fs.cooling_cost = Expression(expr=0.25e-7 * (-m.fs.F101.heat_duty[0]) +
                                    0.2e-7 * (-m.fs.distillation.
                                              condenser.heat_duty[0]))
-    m.fs.heating_cost = Expression(expr=2.5e-7 * m.fs.H101.heat_duty[0] +
-                                   5.0e-7 * m.fs.R101.heat_duty[0] +
-                                   1.2e-7 * m.fs.pre_heater.heat_duty[0] +
-                                   3.5e-7 * m.fs.distillation.
+    m.fs.heating_cost = Expression(expr=2.2e-7 * m.fs.H101.heat_duty[0] +
+                                   1.2e-7 * m.fs.H102.heat_duty[0] +
+                                   1.9e-7 * m.fs.distillation.
                                    reboiler.heat_duty[0])
     m.fs.operating_cost = Expression(expr=(3600 * 24 * 365 *
                                            (m.fs.heating_cost +
@@ -310,22 +291,19 @@ def get_opt_model(m):
     # Unfix degrees of freedom
     m.fs.H101.outlet.temperature.unfix()
     # Do not unfix reactor heat duty - trying to optimize this causes issues
-    m.fs.R101.heat_duty.unfix()
     m.fs.R101.conversion.unfix()  # Unfix conversion constraint
     m.fs.F101.vap_outlet.temperature.unfix()
-    m.fs.pre_heater.outlet.temperature.unfix()
+    m.fs.H102.outlet.temperature.unfix()
     m.fs.distillation.condenser.condenser_pressure.unfix()
     m.fs.distillation.condenser.reflux_ratio.unfix()
     m.fs.distillation.reboiler.boilup_ratio.unfix()
 
     # Set bounds
     m.fs.H101.outlet.temperature[0].setlb(500)
-    m.fs.H101.outlet.temperature[0].setub(750)
+    m.fs.H101.outlet.temperature[0].setub(600)
 
     m.fs.R101.outlet.temperature[0].setlb(600)
     m.fs.R101.outlet.temperature[0].setub(900)
-    m.fs.R101.heat_duty[0].setlb(0)
-
     # New bounds
     m.fs.R101.volume[0].setlb(0)
     # Adding an upper bound on volume causes solver failures for some reason.
@@ -333,8 +311,8 @@ def get_opt_model(m):
     m.fs.F101.vap_outlet.temperature[0].setlb(298)
     m.fs.F101.vap_outlet.temperature[0].setub(450.0)
 
-    m.fs.pre_heater.outlet.temperature[0].setlb(300)
-    m.fs.pre_heater.outlet.temperature[0].setub(400)
+    m.fs.H102.outlet.temperature[0].setlb(350)
+    m.fs.H102.outlet.temperature[0].setub(400)
 
     m.fs.distillation.condenser.condenser_pressure.setlb(101325)
     m.fs.distillation.condenser.condenser_pressure.setub(150000)
@@ -358,8 +336,126 @@ def get_opt_model(m):
     return m
 
 
+def get_opt_model_det(m):
+    # m - an initialized model
+
+    # Add operating cost
+    # Removed reactor cooling duty from expression, as it will now remain fixed
+    m.fs.cooling_cost = Expression(expr=0.25e-7 * (-m.fs.F101.heat_duty[0]) +
+                                   0.2e-7 * (-m.fs.distillation.
+                                             condenser.heat_duty[0]))
+    m.fs.heating_cost = Expression(expr=2.2e-7 * m.fs.H101.heat_duty[0] +
+                                   1.2e-7 * m.fs.H102.heat_duty[0] +
+                                   1.9e-7 * m.fs.distillation.
+                                   reboiler.heat_duty[0])
+    m.fs.operating_cost = Expression(expr=(3600 * 24 * 365 *
+                                           (m.fs.heating_cost +
+                                            m.fs.cooling_cost)))
+
+    # Add expresion for capital cost
+    # Random cost coefficient
+    # m.fs.capital_cost = Expression(expr=1e5*m.fs.R101.volume[0])
+
+    # Added capital cost to objective
+    m.fs.objective = Objective(expr=m.fs.operating_cost)
+
+    # Unfix degrees of freedom
+    m.fs.H101.outlet.temperature.unfix()
+    # Do not unfix reactor heat duty - trying to optimize this causes issues
+    # m.fs.R101.conversion.unfix()  # Unfix conversion constraint
+    m.fs.F101.vap_outlet.temperature.unfix()
+    m.fs.H102.outlet.temperature.unfix()
+    m.fs.distillation.condenser.condenser_pressure.unfix()
+    m.fs.distillation.condenser.reflux_ratio.unfix()
+    m.fs.distillation.reboiler.boilup_ratio.unfix()
+
+    # Set bounds
+    m.fs.H101.outlet.temperature[0].setlb(500)
+    m.fs.H101.outlet.temperature[0].setub(600)
+
+    m.fs.R101.outlet.temperature[0].setlb(600)
+    m.fs.R101.outlet.temperature[0].setub(900)
+    # New bounds
+    # m.fs.R101.volume[0].setlb(0)
+    # Adding an upper bound on volume causes solver failures for some reason.
+
+    m.fs.F101.vap_outlet.temperature[0].setlb(298)
+    m.fs.F101.vap_outlet.temperature[0].setub(450.0)
+
+    m.fs.H102.outlet.temperature[0].setlb(350)
+    m.fs.H102.outlet.temperature[0].setub(400)
+
+    m.fs.distillation.condenser.condenser_pressure.setlb(101325)
+    m.fs.distillation.condenser.condenser_pressure.setub(150000)
+
+    m.fs.distillation.condenser.reflux_ratio.setlb(0.1)
+    m.fs.distillation.condenser.reflux_ratio.setub(5)
+
+    m.fs.distillation.reboiler.boilup_ratio.setlb(0.1)
+    m.fs.distillation.reboiler.boilup_ratio.setub(5)
+
+    m.fs.overhead_loss = Constraint(
+        expr=m.fs.F101.vap_outlet.flow_mol_phase_comp[0, "Vap", "benzene"] <=
+        0.20 * m.fs.R101.outlet.flow_mol_phase_comp[0, "Vap", "benzene"])
+    m.fs.product_flow = Constraint(
+        expr=m.fs.distillation.condenser.distillate.flow_mol[0] >=
+        0.18)
+    m.fs.product_purity = Constraint(
+        expr=m.fs.distillation.condenser.
+        distillate.mole_frac_comp[0, "benzene"] >= 0.99)
+
+    return m
+
+
+def get_ouu_extensive_form(n_scenarios=None):
+    arrhenius_mean = 6.3e+10
+    act_energy_mean = 217.6e3
+    n = n_scenarios
+    m = ConcreteModel()
+
+    obj_expr = 0
+    m.reactor_volume = Var()
+
+    a_list = []
+    e_list = []
+
+    for i in range(n):
+        mi = get_init_model()
+        mo = get_opt_model(mi)
+        arrhenius = rnd.normal(arrhenius_mean, 0.015*arrhenius_mean)
+        act_energy = rnd.normal(act_energy_mean, 0.015*act_energy_mean)
+        a_list.append(arrhenius)
+        e_list.append(act_energy)
+        mo.fs.reaction_params.arrhenius.fix(arrhenius)
+        mo.fs.reaction_params.energy_activation.fix(act_energy)
+        mo.non_antic = Constraint(
+            expr=mo.fs.R101.volume[0] == m.reactor_volume)
+        mo.fs.objective.deactivate()
+        obj_expr += 1/n * (mo.fs.capital_cost + mo.fs.operating_cost)
+        setattr(m, 'scenario_{}'.format(i), mo)
+
+    m.obj = Objective(expr=obj_expr)
+
+    return m
+
+
 def report_optimal(m):
 
+    print()
+    print("Arrhenius constant = ", value(m.fs.reaction_params.arrhenius))
+    print("Activation energy = ",
+          value(m.fs.reaction_params.energy_activation))
+    print()
+    print("Objective function")
+    print("Capital cost ",
+          value(m.fs.capital_cost))
+    print("Operating cost ",
+          value(m.fs.operating_cost))
+    print()
+    print("Optimal design variables")
+    print("optimal reactor volume is ",
+          value(m.fs.R101.volume[0]))
+    print()
     print("Optimal operating variables:")
     print("optimal H101 temperature is ",
           value(m.fs.H101.outlet.temperature[0]))
@@ -367,8 +463,8 @@ def report_optimal(m):
           value(m.fs.R101.outlet.temperature[0]))
     print("optimal F101 outlet temperature is ",
           value(m.fs.F101.vap_outlet.temperature[0]))
-    print("optimal pre_heater outlet temperature is ",
-          value(m.fs.pre_heater.outlet.temperature[0]))
+    print("optimal H102 outlet temperature is ",
+          value(m.fs.H102.outlet.temperature[0]))
     print("optimal condenser pressure is ",
           value(m.fs.distillation.condenser.condenser_pressure[0]))
     print("optimal reflux ratio is ",
@@ -377,34 +473,95 @@ def report_optimal(m):
           value(m.fs.distillation.reboiler.boilup_ratio))
 
     # print("Column Report")
-    m.fs.H101.report()
-    m.fs.R101.report()
-    m.fs.R101.conversion.display()
-    m.fs.F101.report()
-    m.fs.pre_heater.report()
-    m.fs.distillation.condenser.report()
-    m.fs.distillation.reboiler.report()
+    # m.fs.H101.report()
+    # m.fs.R101.report()
+    # m.fs.R101.conversion.display()
+    # m.fs.F101.report()
+    # m.fs.H102.report()
+    # m.fs.distillation.condenser.report()
+    # m.fs.distillation.reboiler.report()
 
-    # Check expected optimal values
-    # assert value(m.fs.H101.outlet.temperature[0]) == \
-    #     pytest.approx(500, rel=1e-3)
-    # assert value(m.fs.R101.outlet.temperature[0]) == \
-    #     pytest.approx(696.11, rel=1e-3)
-    # assert value(m.fs.F101.vap_outlet.temperature[0]) == \
-    #     pytest.approx(301.87, rel=1e-3)
-    # assert value(m.fs.pre_heater.outlet.temperature[0]) == \
-    #     pytest.approx(373.63, rel=1e-3)
-    # assert value(m.fs.distillation.condenser.condenser_pressure[0]) == \
-    #     pytest.approx(101325, rel=1e-2)
-    # assert value(m.fs.distillation.condenser.reflux_ratio) == \
-    #     pytest.approx(0.777, rel=1e-3)
-    # assert value(m.fs.distillation.reboiler.boilup_ratio) == \
-    #     pytest.approx(0.984, rel=1e-3)
+
+def store_optimal_operating(m_stochastic, n_scenarios=None):
+    arrhenius = []
+    act_energy = []
+
+    cap_cost = []
+    op_cost = []
+
+    h101_temp = []
+    r101_temp = []
+    f101_temp = []
+    h102_temp = []
+    cond_pr = []
+    cond_rr = []
+    cond_br = []
+
+    for i in range(n_scenarios):
+        m = getattr(m_stochastic, 'scenario_{}'.format(i))
+
+        arrhenius.append(value(m.fs.reaction_params.arrhenius))
+        act_energy.append(value(m.fs.reaction_params.energy_activation))
+
+        cap_cost.append(value(m.fs.capital_cost))
+        op_cost.append(value(m.fs.operating_cost))
+
+        h101_temp.append(value(m.fs.H101.outlet.temperature[0]))
+        r101_temp.append(value(m.fs.R101.outlet.temperature[0]))
+        f101_temp.append(value(m.fs.F101.vap_outlet.temperature[0]))
+        h102_temp.append(value(m.fs.H102.outlet.temperature[0]))
+        cond_pr.append(
+            value(m.fs.distillation.condenser.condenser_pressure[0]))
+        cond_rr.append(value(m.fs.distillation.condenser.reflux_ratio))
+        cond_br.append(value(m.fs.distillation.reboiler.boilup_ratio))
+
+    run_data = pd.DataFrame()
+
+    run_data["arrhenius"] = arrhenius
+    run_data["act_energy"] = act_energy
+    run_data["cap_cost"] = cap_cost
+    run_data["op_cost"] = op_cost
+    run_data["h101_temp"] = h101_temp
+    run_data["r101_temp"] = r101_temp
+    run_data["f101_temp"] = f101_temp
+    run_data["h102_temp"] = h102_temp
+    run_data["cond_pr"] = cond_pr
+    run_data["cond_rr"] = cond_rr
+    run_data["cond_br"] = cond_br
+
+    return run_data
 
 
 if __name__ == "__main__":
-    m = get_init_model()
-    m = get_opt_model(m)
-    solver = get_default_solver()
-    res = solver.solve(m, tee=True)
-    report_optimal(m)
+
+    # load OUU 100 scenarios case
+    run_data_100 = pd.read_pickle("run_data_100.pkl")
+    run_status = []
+
+    for i in range(5):
+
+        print(i)
+        m_deterministic = get_init_model()
+        # m_deterministic.fs.R101.volume[0].fix(0.2993)
+        # m_deterministic.fs.R101.conversion.unfix()
+        arrhenius = run_data_100["arrhenius"][i]
+        act_energy = run_data_100["act_energy"][i]
+        m_deterministic.fs.reaction_params.arrhenius.fix(arrhenius)
+        m_deterministic.fs.reaction_params.energy_activation.fix(act_energy)
+
+        # # Solve deterministic model
+        solver = get_default_solver()
+        res = solver.solve(m_deterministic, tee=False)
+
+        m_deterministic = get_opt_model_det(m_deterministic)
+        m_deterministic.fs.R101.volume[0].fix(0.30029)
+        m_deterministic.fs.R101.conversion.unfix()
+
+        try:
+            res = solver.solve(m_deterministic, tee=False)
+            run_status.append(idaeslog.condition(res))
+        except ValueError:
+            run_status.append("Failed")
+
+    print(run_status)
+    # run_data_100["run_status"] = run_status
