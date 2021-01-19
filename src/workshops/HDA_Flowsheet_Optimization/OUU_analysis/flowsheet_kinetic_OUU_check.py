@@ -49,7 +49,7 @@ import hda_reaction_kinetic as reaction_props
 from hda_ideal_VLE import HDAParameterBlock
 
 
-def get_init_model(outlvl=idaeslog.WARNING):
+def get_init_model(arrhenius=None, act_energy=None, outlvl=idaeslog.WARNING):
     m = ConcreteModel()
     m.fs = FlowsheetBlock(default={"dynamic": False})
 
@@ -62,6 +62,12 @@ def get_init_model(outlvl=idaeslog.WARNING):
 
     m.fs.reaction_params = reaction_props.HDAReactionParameterBlock(
         default={"property_package": m.fs.thermo_params})
+
+    if arrhenius is not None:
+        m.fs.reaction_params.arrhenius.fix(arrhenius)
+    if act_energy is not None:
+        m.fs.reaction_params.energy_activation.fix(act_energy)
+
     m.fs.translator = Translator(default={
                                  "inlet_property_package": m.fs.thermo_params,
                                  "outlet_property_package":
@@ -336,7 +342,7 @@ def get_opt_model(m):
     return m
 
 
-def get_opt_model_det(m):
+def get_opt_model_det(m, vol_det=None):
     # m - an initialized model
 
     # Add operating cost
@@ -354,15 +360,16 @@ def get_opt_model_det(m):
 
     # Add expresion for capital cost
     # Random cost coefficient
-    # m.fs.capital_cost = Expression(expr=1e5*m.fs.R101.volume[0])
+    m.fs.capital_cost = Expression(expr=1e5*m.fs.R101.volume[0])
 
     # Added capital cost to objective
-    m.fs.objective = Objective(expr=m.fs.operating_cost)
+    m.fs.objective = Objective(expr=m.fs.capital_cost + m.fs.operating_cost)
+    # m.fs.objective = Objective(expr=m.fs.operating_cost)
 
     # Unfix degrees of freedom
     m.fs.H101.outlet.temperature.unfix()
     # Do not unfix reactor heat duty - trying to optimize this causes issues
-    # m.fs.R101.conversion.unfix()  # Unfix conversion constraint
+    m.fs.R101.conversion.unfix()  # Unfix conversion constraint
     m.fs.F101.vap_outlet.temperature.unfix()
     m.fs.H102.outlet.temperature.unfix()
     m.fs.distillation.condenser.condenser_pressure.unfix()
@@ -376,7 +383,7 @@ def get_opt_model_det(m):
     m.fs.R101.outlet.temperature[0].setlb(600)
     m.fs.R101.outlet.temperature[0].setub(900)
     # New bounds
-    # m.fs.R101.volume[0].setlb(0)
+    m.fs.R101.volume[0].setlb(0)
     # Adding an upper bound on volume causes solver failures for some reason.
 
     m.fs.F101.vap_outlet.temperature[0].setlb(298)
@@ -403,6 +410,12 @@ def get_opt_model_det(m):
     m.fs.product_purity = Constraint(
         expr=m.fs.distillation.condenser.
         distillate.mole_frac_comp[0, "benzene"] >= 0.99)
+
+    m.fs.reactor_vol = Constraint(
+        expr=m.fs.R101.volume[0] == vol_det
+    )
+
+    # m.fs.R101.volume[0].fix(vol_det)
 
     return m
 
@@ -537,31 +550,50 @@ if __name__ == "__main__":
     # load OUU 100 scenarios case
     run_data_100 = pd.read_pickle("run_data_100.pkl")
     run_status = []
+    op_cost_det = []
+    m_base_case = get_init_model()
+    m_base_case_opt = get_opt_model(m_base_case)
+    solver = get_default_solver()
+    res = solver.solve(m_base_case_opt, tee=False)
 
-    for i in range(5):
+    vol_det = m_base_case_opt.fs.R101.volume[0].value
+
+    report_optimal(m_base_case_opt)
+
+    for i in range(len(run_data_100)):
 
         print(i)
-        m_deterministic = get_init_model()
+        arrhenius = 6.3e+10
+        act_energy = 217.6e3
+        m_deterministic = get_init_model(
+            arrhenius=arrhenius, act_energy=act_energy)
         # m_deterministic.fs.R101.volume[0].fix(0.2993)
-        # m_deterministic.fs.R101.conversion.unfix()
         arrhenius = run_data_100["arrhenius"][i]
         act_energy = run_data_100["act_energy"][i]
+        # m_deterministic.fs.R101.conversion.unfix()
         m_deterministic.fs.reaction_params.arrhenius.fix(arrhenius)
         m_deterministic.fs.reaction_params.energy_activation.fix(act_energy)
 
         # # Solve deterministic model
-        solver = get_default_solver()
         res = solver.solve(m_deterministic, tee=False)
 
-        m_deterministic = get_opt_model_det(m_deterministic)
-        m_deterministic.fs.R101.volume[0].fix(0.30029)
-        m_deterministic.fs.R101.conversion.unfix()
-
+        m_deterministic = get_opt_model_det(m_deterministic, vol_det=vol_det)
+        # m_deterministic.fs.R101.volume[0].fix(0.30029)
+        # m_deterministic.fs.R101.conversion.unfix()
+        #
         try:
             res = solver.solve(m_deterministic, tee=False)
-            run_status.append(idaeslog.condition(res))
+            if res.solver.termination_condition == \
+                    TerminationCondition.optimal:
+                run_status.append(1)
+                op_cost_det.append(value(m_deterministic.fs.operating_cost))
+            else:
+                run_status.append(0)
+                op_cost_det.append(1e6)
         except ValueError:
-            run_status.append("Failed")
+            run_status.append(0)
 
     print(run_status)
-    # run_data_100["run_status"] = run_status
+    run_data_100["run_status"] = run_status
+    run_data_100["op_cost_det"] = op_cost_det
+    run_data_100.to_pickle("run_data_100_det.pkl")

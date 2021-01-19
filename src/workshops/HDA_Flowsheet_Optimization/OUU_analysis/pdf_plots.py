@@ -3,7 +3,7 @@ import scipy.stats as st
 import numpy as np
 import pandas as pd
 
-run_data = pd.read_pickle("run_data_100.pkl")
+run_data = pd.read_pickle("run_data_100_det.pkl")
 
 print(run_data)
 
@@ -111,4 +111,53 @@ plt.axvline(1.134, color="red", label="Deterministic case")
 plt.legend()
 plt.title("C101 Boilup Ratio")
 
+plt.show()
+
+failed_cases = run_data[run_data["run_status"] == 0].index.values
+color_cycles = ["red", "magenta", "yellow", "orange"]
+color_index = 0
+plt.figure(3)
+plt.subplot(1, 3, 1)
+run_data["arrhenius"].plot.hist(
+    color='b',
+    range=[run_data["arrhenius"].min(), run_data["arrhenius"].max()],
+    rwidth=0.95,
+    label="Feasible")
+
+for i in failed_cases:
+    label = "Inf. sc. #" + str(i)
+    color = color_cycles[color_index]
+    plt.axvline(
+        run_data["arrhenius"][i], color=color, label=label)
+    color_index = color_index+1
+plt.title("arrhenius factor")
+plt.legend()
+
+plt.subplot(1, 3, 2)
+color_index = 0
+run_data["act_energy"].plot.hist(
+    color='b',
+    range=[run_data["act_energy"].min(), run_data["act_energy"].max()],
+    rwidth=0.95,
+    label="Feasible")
+for i in failed_cases:
+    label = "Inf. sc. #" + str(i)
+    color = color_cycles[color_index]
+    plt.axvline(
+        run_data["act_energy"][i], color=color, label=label)
+    color_index = color_index+1
+plt.title("activation energy")
+plt.legend()
+
+# remove infeasible cases
+run_data_feasible = run_data.drop(failed_cases)
+print(run_data_feasible)
+plt.subplot(1, 3, 3)
+sum_op_cost = [sum(run_data_feasible["op_cost"]),
+               sum(run_data_feasible["op_cost_det"])]
+x_names = ["sum_stochastic", "sum_deterministic"]
+plt.bar(x_names, sum_op_cost)
+plt.ylim([39200000, 39300000])
+plt.title("Operating Cost")
+plt.legend()
 plt.show()
